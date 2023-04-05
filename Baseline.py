@@ -46,7 +46,7 @@ class BaselineModel:
         self.shots = shots
         self.dropout = dropout
         self.batch_size = batch_size
-        self.frame_step = frame_step,
+        self.frame_step = frame_step
         self.output_signature = output_signature
     
     def train(self):
@@ -57,7 +57,7 @@ class BaselineModel:
         model_checkpoint = tf.keras.callbacks.ModelCheckpoint(filepath=self.checkpoint_dir+self.weights_file, 
                                                               monitor='val_loss', save_weights_only=True, save_best_only=True)
         
-        train, val = Utils.remove_paths(self.train_ds, self.val_ds)
+        train, val = Utils.remove_paths(self.train_ds), Utils.remove_paths(self.val_ds)
         self.base_model.compile(loss=loss_obj, optimizer=optimizer, metrics=['accuracy'])
         results = self.base_model.fit(train,
                             validation_data=val,
@@ -69,9 +69,13 @@ class BaselineModel:
         return results
     
     def test(self):
-        _, test = Utils.remove_paths(self.train_ds, self.test_ds)
+        test = Utils.remove_paths(self.test_ds)
         self.actual, self.predicted = Utils.get_actual_predicted_labels(test, self.base_model)
         self.test_acc = balanced_accuracy_score(self.actual, self.predicted)
+        
+    def predict(self, ds):
+        labels = self.base_model.predict(ds)
+        return labels
         
     def load_best_weights(self):
         self.base_model.load_weights(self.checkpoint_dir+self.weights_file)
@@ -104,29 +108,30 @@ class BaselineModel:
         self.stream_model.set_weights(self.base_model.get_weights())
     
     def init_data(self, extension, train_path = "", val_path = "", test_path = ""):
+        
         if train_path != "":
             train_ds = tf.data.Dataset.from_generator(Utils.FrameGenerator(Path(train_path), self.num_frames,
                                                                            resolution = self.resolution,
                                                                            training = True, 
                                                                            extension=extension,
-                                                                           shots=self.shots,
-                                                                           frame_step=self.frame_step),
+                                                                           frame_step=self.frame_step,
+                                                                           shots=self.shots),
                                                              output_signature = self.output_signature)
             self.train_ds = train_ds.batch(self.batch_size)
         
         if val_path != "":
-            val_ds = tf.data.Dataset.from_generator(Utils.FrameGenerator(Path(val_path), self.num_frames, 
+            val_ds = tf.data.Dataset.from_generator(Utils.FrameGenerator(Path(val_path), self.num_frames,
                                                                            resolution = self.resolution,
-                                                                           extension=extension,
-                                                                           frame_step=self.frame_step),
+                                                                           frame_step=self.frame_step,
+                                                                           extension=extension),
                                                              output_signature = self.output_signature)
             self.val_ds = val_ds.batch(self.batch_size)
             
         if test_path != "":
             test_ds = tf.data.Dataset.from_generator(Utils.FrameGenerator(Path(test_path), self.num_frames,
                                                                            resolution = self.resolution,
-                                                                           extension=extension,
-                                                                           frame_step=self.frame_step),
+                                                                           frame_step=self.frame_step,
+                                                                           extension=extension),
                                                              output_signature = self.output_signature)
             self.test_ds = test_ds.batch(self.batch_size)
             

@@ -4,6 +4,9 @@ import numpy as np
 import cv2
 from Baseline import BaselineModel
 import os
+from ProposalGenerator import ProposalGenerator
+from pathlib import Path
+import datetime
 
 
 class ActiveLearningModel(BaselineModel):
@@ -14,24 +17,35 @@ class ActiveLearningModel(BaselineModel):
     num_loops: int
     num_samples: int
     
-    def __init__(self, num_loops, num_samples, *args, **kwargs):
+    def __init__(self, num_loops, data_path, num_samples, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.name = "AL"
         self.weights_file = f'/movinet_{self.name}_{self.model_id}_{self.model_type}_weights.hdf5'
         self.num_loops = num_loops
         self.num_samples = num_samples
+        self.unlabeled_paths = []
+        self.unlabeled_path = ""
+        
+        for root, dirs, files in os.walk(data_path):
+            for file in files:
+                if file.endswith(".mp4"):
+                    self.unlabeled_paths.append(os.path.join(root, file))
     
     def init_data(self, *args, **kwargs):
         super().init_data(*args, **kwargs)
-        self.unlabeled_ds = self.val_ds
         self.labeled_ds = self.train_ds
     
-    def get_labels(self, paths):
+    def init_unlabeled_data(self, path, extension='.mp4'):
+            unlabeled_ds = tf.data.Dataset.from_generator(ProposalGenerator(self.base_model, path, 
+                                   Utils.MOVINET_PARAMS[self.model_id][1]*5, Utils.MOVINET_PARAMS[self.model_id][0], 
+                                   self.frame_step), output_signature = Utils.GENERATOR_SIGNATURE)
+            self.unlabeled_ds = unlabeled_ds.batch(self.batch_size)
+    
+    def get_labels(self, path, start_indices, stop_indices, samples):
         labels = []
-        
-        for path in paths:
-            path = path.decode('utf-8')
-            
+        #path = path.decode('utf-8')
+        for i in range(len(start_indices)):
+            start, stop = start_indices[i], stop_indices[i]
             #Print the labels and instructions
             def print_instructions():
                 os.system('cls' if os.name == 'nt' else 'clear')
@@ -39,27 +53,31 @@ class ActiveLearningModel(BaselineModel):
                 for i in range(len(self.label_names)):
                     print(f'{i}: {self.label_names[i]}')
                 print("r: REPLAY")
+                print("m: MODIFY start/stop")
+                print("o: OTHER class label (please enter)")
             
             #Play the video
-            def play_video():
+            def play_video(start, stop):
                 
                 # Load the video using OpenCV
                 cap = cv2.VideoCapture(path)
-                
-                # Create a window to display the video
                 cv2.namedWindow("Video", cv2.WND_PROP_FULLSCREEN)
-                #cv2.setWindowProperty('Video', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_NORMAL)
                 cv2.setWindowProperty('Video', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-                #cv2.resizeWindow("Video", 1280, 720)
-                #cv2.moveWindow("Video", 100, 100)
+                frames = []
+                fps=30
+                counter=0
                 
-                while True:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, start)
+                while cap.get(cv2.CAP_PROP_POS_FRAMES) < stop:
                     
                     # Read a frame from the video
+                    counter+=1
                     ret, frame = cap.read()
                     if not ret:
                         break
-                    cv2.imshow("Video", frame)
+                    frames.append(frame)
+                    show_frame = cv2.putText(frame.copy(), f"{int(counter/fps)}/{int((stop-start)/fps)} seconds", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
+                    cv2.imshow("Video", show_frame)
                     
                     # Handle key events
                     key = cv2.waitKey(30) & 0xFF
@@ -71,92 +89,167 @@ class ActiveLearningModel(BaselineModel):
                 cap.release()
                 cv2.destroyAllWindows()
                 
+                return frames
+            
+            def save_video(played_frames, label):
+                now=datetime.datetime.now()
+                time_str = now.strftime("%H:%M:%S").replace(":", "_")
+                if type(label) == str:
+                    vid_dir = f'data/saved/{label}'
+                else:
+                    vid_dir = f'data/saved/{Utils.LABEL_NAMES[label]}'
+                    
+                if not os.path.exists(vid_dir):
+                    os.mkdir(vid_dir)
+                
+                out = cv2.VideoWriter(f"{vid_dir}/{time_str}.mp4", cv2.VideoWriter_fourcc(*'mp4v'), 30, (1280, 720))
+                for frame in played_frames:
+                    out.write(frame) # frame is a numpy.ndarray with shape (1280, 720, 3)
+                out.release()
+                
             # Define a function to confirm the label and move on to the next video
-            def confirm_label(label):
+            def confirm_label(label, played_frames):
                 if label not in range(len(self.label_names)):
                     print("Invalid input, please enter a label between 0 and", len(self.label_names)-1)
                     return
                 nonlocal labels
                 labels.append(label)
+                save_video(played_frames, label)
+                
+            def change_video_length():
+                os.system('cls' if os.name == 'nt' else 'clear')
+                print("Do you want to add or remove frames to the front or back")
+                print("First enter how many seconds you want to add/remove from the front")
+                print("Then enter how many seconds you want to add/remove to the back")
+                print("'-0.5' removes half a second, 2 adds two seconds")
+                print("For example,-0.5:2 to remove 0.5 seconds from front and add 2 seconds to the end.")
+                
+                change = input("Enter in format [s:s], 'q' to skip: ")
+                fps=30
+                if (change == 'q') or (change == 'Q'):
+                    return start, stop, False
+                else:
+                    try:
+                        change_start, change_end = change.split(':')
+                        change_start, change_end = int(change_start)*30, int(change_end)*30
+                    except:
+                        print("Did not recognise input, try again")
+                        return change_video_length()
+                    
+                return start+change_start, change_end+stop, True
+            
+            def create_new_sample(start, stop):
+                #step = (stop-start)/self.n_frames
+                result = []
+                cap = cv2.VideoCapture(path)
+                cap.set(cv2.CAP_PROP_POS_FRAMES, start)
+                
+                for _ in range(self.num_frames-1):
+                  for _ in range(self.frame_step):
+                    ret, frame = cap.read()
+                  if ret:
+                    frame = Utils.format_frames(frame, (self.resolution, self.resolution))
+                    result.append(frame)
+                  else:
+                    result.append(np.zeros_like(result[0]))
+
+                cap.release()
+                result = np.array(result)[..., [2, 1, 0]]
+
+                return result
                 
             label = None    
             while label == None:
-                
-                play_video()
-                print_instructions()
-                label_str = input("Please select label (number): ")
-                if label_str == 'r' or label_str == 'R':
-                    continue
-                
-                try: 
-                    label = int(label_str)
-                    confirm_label(label)
-                except Exception as e:
-                    print(f"This gave error {e}, please enter a valid label number")
+                try:
+                    played_frames = play_video(start, stop)
+                                
+                    print_instructions()
+                    label_str = input("Please select label (number): ")
+                    if label_str == 'r' or label_str == 'R':
+                        continue
                     
-        return labels                    
+                    if label_str == 'm' or label_str == 'M':
+                        start, stop, changed = change_video_length()
+                        if changed:
+                            samples[i] = create_new_sample(start, stop)
+                            continue
+                    
+                    if label_str == 'o' or label_str == 'O':
+                        other_label = input("Please enter class label in text (a-z): ")
+                        save_video(played_frames, other_label)
+                        del samples[i]
+                        break
+                
+                    try: 
+                        label = int(label_str)
+                        confirm_label(label, played_frames)
+                    except Exception as e:
+                        print(f"This gave error {e}, please enter a valid label number")
+                
+                except Exception as e:
+                    print("Something went wrong with this label, skipping it: {e}")
+                    break
+        
+        return np.array(labels), np.array(samples)
                    
     
     def select_samples(self, labeled_ds, unlabeled_ds, num_samples):
         # Get predicted probabilities for unlabeled samples
-        unlabeled_probs = tf.nn.softmax(self.base_model.predict(unlabeled_ds))
-    
+        #unlabeled_frames = Utils.remove_indices(unlabeled_ds)
+        data = [d for d in unlabeled_ds.unbatch()]
+        vids = np.array([v for v, _, _ in data])
+        starts = [start for _, start, _ in data]
+        stops = [stop for _, _, stop in data]
+        
+        unlabeled_probs = tf.nn.softmax(self.base_model.predict(vids))
         # Get maximum entropy for each sample
         entropies = tf.math.log(unlabeled_probs) * unlabeled_probs
         entropies = tf.reduce_sum(entropies, axis=-1)
-    
         # Select samples with highest entropy
         indices = tf.argsort(entropies, direction='ASCENDING')
         selected_indices = indices[:num_samples]
         selected_indices = tf.cast(indices[:num_samples], dtype=tf.int64)  # cast to int64
-        
-        # Convert dataset to numpy iterator
-        iterator = unlabeled_ds.unbatch().as_numpy_iterator()
     
         # Iterate over the dataset to extract frames and labels as numpy arrays
-        frames = []
-        labels = []
-        paths = []
-        for example in iterator:
-            frames.append(example[0])
-            labels.append(example[1])
-            paths.append(example[2])
-    
+        processed_frames = []
+        start_indices = []
+        stop_indices = []
+
+        for i in range(len(vids)):
+            example = (vids[i], starts[i], stops[i])
+            processed_frames.append(example[0])
+            start_indices.append(example[1])
+            stop_indices.append(example[2])
+        
         # Convert lists to numpy arrays
-        frames = np.array(frames)
-        labels = np.array(labels)
-        paths = np.array(paths)
+        processed_frames = np.array(processed_frames)
+        start_indices = np.array(start_indices)
+        stop_indices = np.array(stop_indices)
     
         # Get corresponding samples from unlabeled dataset
         selected_samples = []
-        selected_labels = []
-        selected_paths = []
+        selected_start = []
+        selected_stop = []
+        
         for index in selected_indices:
-            selected_sample = frames[index]
-            selected_samples.append(selected_sample)
-            selected_label = labels[index]
-            selected_labels.append(selected_label)
-            selected_path = paths[index]
-            selected_paths.append(selected_path)
+            selected_samples.append(processed_frames[index])
+            selected_start.append(start_indices[index])
+            selected_stop.append(stop_indices[index])
             
-        frames = np.delete(frames, selected_indices, axis=0)
-        labels = np.delete(labels, selected_indices)
-        paths = np.delete(paths, selected_indices)
+        processed_frames = np.delete(processed_frames, selected_indices, axis=0)
+        start_indices = np.delete(start_indices, selected_indices)
+        stop_indices = np.delete(stop_indices, selected_indices)
         
-        selected_samples = np.array(selected_samples)
-        selected_labels = np.array(selected_labels)
-        selected_labels = np.array(self.get_labels(selected_paths))
-        #selected_paths = np.array(selected_paths)
-        
-        unlabeled_ds = tf.data.Dataset.from_tensor_slices((frames, labels, paths))
+        selected_labels, selected_samples = self.get_labels(self.unlabeled_path, selected_start, selected_stop, selected_samples)
+        unlabeled_ds = tf.data.Dataset.from_tensor_slices((processed_frames, start_indices, stop_indices))
         unlabeled_ds = unlabeled_ds.batch(self.batch_size)
         
         selected_frames_tensor = tf.constant(selected_samples)
         selected_labels_tensor = tf.convert_to_tensor(selected_labels, dtype=tf.int16)
-        selected_paths_tensor = tf.constant(selected_paths)
+        selected_paths_tensor = tf.constant(np.array([f'class_{label}.mp4' for label in selected_labels]))
+        
         labeled_ds = labeled_ds.unbatch().concatenate(tf.data.Dataset.from_tensor_slices((selected_frames_tensor, selected_labels_tensor, selected_paths_tensor)))
         labeled_ds = labeled_ds.batch(self.batch_size)
-    
         return labeled_ds, unlabeled_ds
     
     def train(self):
@@ -171,7 +264,7 @@ class ActiveLearningModel(BaselineModel):
 
         self.base_model.compile(loss=loss_obj, optimizer=optimizer, metrics=['accuracy'])
 
-        train, val = Utils.remove_paths(self.labeled_ds, self.unlabeled_ds)
+        train, val = Utils.remove_paths(self.labeled_ds), Utils.remove_paths(self.val_ds)
         results = self.base_model.fit(train,
                             validation_data=val,
                             epochs=self.epochs,
@@ -184,13 +277,14 @@ class ActiveLearningModel(BaselineModel):
 
             print(f'Starting Active Learning loop {i+1}/{self.num_loops}')
             tf.keras.backend.clear_session()
-    
+            self.unlabeled_path = self.unlabeled_paths.pop(np.random.randint(0, len(self.unlabeled_paths)-1))
+            self.init_unlabeled_data(self.unlabeled_path)
             self.labeled_ds, self.unlabeled_ds = self.select_samples(self.labeled_ds, self.unlabeled_ds, self.num_samples)
             
             os.system('cls' if os.name == 'nt' else 'clear')
             print(f'Continuing training loop {i+1}/{self.num_loops}')
 
-            train, val = Utils.remove_paths(self.labeled_ds, self.unlabeled_ds)
+            train, val = Utils.remove_paths(self.labeled_ds), Utils.remove_paths(self.val_ds)
             self.base_model.optimizer.lr = 0.001
             results = self.base_model.fit(train,
                                 validation_data=val,
@@ -208,4 +302,57 @@ class ActiveLearningModel(BaselineModel):
                             verbose=1)
         
         return results
+    
+if __name__ == '__main__':
+    
+    epochs_active_learning=1
+    shots = 5
+    drop_out = 0.5
+    batch_size=16
+    frame_step=6
+    a_id='a2'
+    loops=1
+    num_samples=3
+    unlabeled_path = 'data/long1.1.mp4'
+    
+    model = ActiveLearningModel(
+                num_loops=loops, num_samples=num_samples,
+                data_path = 'data/long',
+                model_id=a_id, model_type="base", 
+                epochs=epochs_active_learning, shots=shots, 
+                dropout=drop_out, 
+                resolution=Utils.MOVINET_PARAMS[a_id][0], 
+                num_frames=Utils.MOVINET_PARAMS[a_id][1]*5, 
+                num_classes=12,
+                batch_size=batch_size, 
+                frame_step=frame_step,
+                output_signature=Utils.OUTPUT_SIGNATURE,
+                label_names=Utils.LABEL_NAMES)
+    
+    model.init_data('.mp4', "data/self/joris", "data/self/roos", "data/self/ercan")
+    model.init_base_model()
+    model.train()
+    model.test()
+    model.plot_confusion_matrix()
+
+    
+    
+    # preds = model.predict(unlabeled_ds)
+    # print(np.argmax(preds, axis=1))
+    
+# from moviepy.video.io.VideoFileClip import VideoFileClip
+
+# # Load the video
+# video = VideoFileClip("data/long/long3.mp4")
+
+# # Get the duration and calculate the duration of each part
+# duration = video.duration
+# part_duration = duration / 3
+
+# # Cut the video into three parts and save them
+# for i in range(3):
+#     start_time = i * part_duration
+#     end_time = (i + 1) * part_duration
+#     part = video.subclip(start_time, end_time)
+#     part.write_videofile(f"data/long/long3.{i+1}.mp4")
 

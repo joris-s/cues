@@ -4,8 +4,10 @@ import cv2
 import numpy as np
 import tensorflow as tf
 import seaborn as sns
-import matplotlib as mpl
-mpl.use('tkagg')
+import os
+if os.name != 'nt':
+    import matplotlib as mpl
+    mpl.use('tkagg')
 
 import matplotlib.pyplot as plt
 params = {"font.serif" : ["Computer Modern Serif"]}
@@ -19,6 +21,10 @@ from sklearn.metrics import confusion_matrix
 OUTPUT_SIGNATURE = (tf.TensorSpec(shape = (None, None, None, 3), dtype = tf.float32),
                     tf.TensorSpec(shape = (), dtype = tf.int16),
                     tf.TensorSpec(shape = (), dtype = tf.string))
+
+GENERATOR_SIGNATURE = (tf.TensorSpec(shape = (None, None, None, 3), dtype = tf.float32), 
+                       tf.TensorSpec(shape = (), dtype = tf.int16), 
+                       tf.TensorSpec(shape = (), dtype = tf.int16))
 
 MOVINET_PARAMS = {
     'a0': (172, 5),
@@ -44,8 +50,8 @@ def frames_from_video_file(video_path, n_frames, output_size, frame_step = 15):
   src = cv2.VideoCapture(str(video_path))  
 
   video_length = src.get(cv2.CAP_PROP_FRAME_COUNT)
-
-  need_length = 1 + (n_frames - 1) * frame_step
+  
+  need_length = 1 + (n_frames-1) * frame_step
 
   if need_length > video_length:
     start = 0
@@ -55,8 +61,8 @@ def frames_from_video_file(video_path, n_frames, output_size, frame_step = 15):
 
   src.set(cv2.CAP_PROP_POS_FRAMES, start)
   # ret is a boolean indicating whether read was successful, frame is the image itself
-  ret, frame = src.read()
-  result.append(format_frames(frame, output_size))
+#  ret, frame = src.read()
+#  result.append(format_frames(frame, output_size))
 
   for _ in range(n_frames - 1):
     for _ in range(frame_step):
@@ -129,7 +135,7 @@ def sliding_frames_from_video(path, n_frames, start_frame, step, output_size = (
     cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
     
     frames = []
-    for i in range(n_frames):
+    for i in range(n_frames-1):
         for _ in range(step):
             ret, frame = cap.read()
         if ret:
@@ -199,16 +205,18 @@ def build_classifier(batch_size, num_frames, resolution, backbone, num_classes):
 
   return model
 
-def remove_paths(dataset1, dataset2):
+def remove_paths(ds):
     # Define a function to select only the frames and labels from each element of the dataset
     def select_frames_and_labels(frames, labels, paths):
         return frames, labels
-
     # Apply the function to each element of the dataset
-    dataset1 = dataset1.map(select_frames_and_labels)
-    dataset2 = dataset2.map(select_frames_and_labels)
+    return ds.map(select_frames_and_labels)
 
-    return dataset1, dataset2
+def remove_indices(ds):
+    def select_frames(frames, start, stop):
+        return frames
+    return ds.map(select_frames)
+
 
 def cm_heatmap(actual, predicted, labels, savefigs=False, name='heatmap'):
     cm_num = confusion_matrix(actual, predicted)
@@ -230,7 +238,7 @@ def cm_heatmap(actual, predicted, labels, savefigs=False, name='heatmap'):
     
     if savefigs:
         plt.savefig('figs/'+name+'.png', bbox_inches='tight', dpi=600)
-        
+    plt.close()    
     #plt.show()
     
 # Read and process a video

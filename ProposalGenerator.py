@@ -1,70 +1,7 @@
 import Utils
-from Baseline import BaselineModel
 import cv2
 import numpy as np
-
-UNLABELED_PATH = 'data/self/long.mp4'
-
-model = BaselineModel(
-            model_id='a0', model_type="base", 
-            epochs=100, shots=5, 
-            dropout=0.5, 
-            resolution=172, 
-            num_frames=32, 
-            num_classes=12,
-            batch_size=16, 
-            output_signature=Utils.OUTPUT_SIGNATURE,
-            label_names=Utils.LABEL_NAMES
-)
-
-model.init_data('.mp4', "data/self/joris", "data/self/ercan", "data/self/roos")
-model.init_base_model()
-try:
-    model.load_best_weights()
-except:
-    print('Weights not found, training instead.')
-    model.train()
-    model.load_best_weights()
-model.test()
-model.plot_confusion_matrix()
-
-def format_frames(frame, output_size):
-  frame = tf.image.convert_image_dtype(frame, tf.float32)
-  frame = tf.image.resize_with_pad(frame, *output_size)
-  return frame
-
-def frames_from_video_file(video_path, n_frames, output_size, frame_step = 15):
-  # Read each video frame by frame
-  result = []
-  src = cv2.VideoCapture(str(video_path))  
-
-  video_length = src.get(cv2.CAP_PROP_FRAME_COUNT)
-
-  need_length = 1 + (n_frames - 1) * frame_step
-
-  if need_length > video_length:
-    start = 0
-  else:
-    max_start = video_length - need_length
-    start = random.randint(0, max_start + 1)
-
-  src.set(cv2.CAP_PROP_POS_FRAMES, start)
-  # ret is a boolean indicating whether read was successful, frame is the image itself
-  ret, frame = src.read()
-  result.append(format_frames(frame, output_size))
-
-  for _ in range(n_frames - 1):
-    for _ in range(frame_step):
-      ret, frame = src.read()
-    if ret:
-      frame = format_frames(frame, output_size)
-      result.append(frame)
-    else:
-      result.append(np.zeros_like(result[0]))
-  src.release()
-  result = np.array(result)[..., [2, 1, 0]]
-
-  return result
+import tensorflow as tf
 
 class ProposalGenerator:
     def __init__(self, model, path, n_frames, resolution, frame_step, extension='.mp4'):
@@ -81,7 +18,7 @@ class ProposalGenerator:
         classes = [p.parent.name for p in video_paths] 
         return video_paths, classes
     
-    def sliding_frames_from_video(self, starting_frame, src):
+    def sliding_frames_from_video(self, starting_frame, src, max_combined=3):
         
         result = []
         next_result = []
@@ -107,13 +44,16 @@ class ProposalGenerator:
         
         np_result = np.array(result)[..., [2, 1, 0]]
         np_next_result = np.array(next_result)[..., [2, 1, 0]]
-        label, next_label = self.model.predict([np_result, np_next_result])
+        label = np.argmax(self.model.predict(np_result[np.newaxis, :])[0])
+        next_label = np.argmax(self.model.predict(np_next_result[np.newaxis, :])[0])
         
-        while label == next_label:
+        counter = 0
+        while (label == next_label) & (counter < max_combined):
             
             result = result+next_result.copy()
             result = result[::2]
             next_result = []
+            counter+=1
             
             for _ in range(self.n_frames - 1):
                 for _ in range(self.frame_step):
@@ -126,12 +66,16 @@ class ProposalGenerator:
             
             np_result = np.array(result)[..., [2, 1, 0]]
             np_next_result = np.array(next_result)[..., [2, 1, 0]]
-            label, next_label = self.model.predict([result, next_result])
+            label = next_label #assume that lengthening the snippet does not chagne predicted label since label==next_label
+            next_label = np.argmax(self.model.predict(np_next_result[np.newaxis, :])[0])
+            
+            
+
 
         stop_index = src.get(cv2.CAP_PROP_POS_FRAMES)
             
         #(processed_frames, start_index, stop_index)
-        return np_result, starting_frame, stop_index
+        return np_result, int(starting_frame), int(stop_index)
     
     def __call__(self):
         
@@ -144,19 +88,86 @@ class ProposalGenerator:
         n_snippets = int(total_frames/self.n_frames)
         
         starting_frame = 0
+        
         while starting_frame < (total_frames-self.n_frames):
             
             #should get this back from the function that processes sliding window
-            processed_frames, start_index, stop_index = self.sliding_frames_from_video(starting_frame, capst)
+            processed_frames, start_index, stop_index = self.sliding_frames_from_video(starting_frame, cap)
             starting_frame = stop_index+1
             
-            yield processed_frames, start_index, stop_index
-        
-        video_paths, classes = self.get_files_and_class_names()
-        pairs = list(zip(video_paths, classes))
-        
-        for path, name in pairs:
-            video_frames = Utils.frames_from_video_file(path, self.n_frames, output_size=(self.resolution, self.resolution)) 
+            yield processed_frames, start_index, stop_index#, stop_index
+            
+if __name__ == '__main__':
+    
+    epochs_active_learning=1
+    shots = -1
+    drop_out = 0.5
+    batch_size=16
+    frame_step=6
+    a_id='a2'
+    loops=3
+    num_samples=10
+    
+    model = ActiveLearningModel(
+                num_loops=loops, num_samples=num_samples,
+                model_id=a_id, model_type="base", 
+                epochs=epochs_active_learning, shots=shots, 
+                dropout=drop_out, 
+                resolution=Utils.MOVINET_PARAMS[a_id][0], 
+                num_frames=Utils.MOVINET_PARAMS[a_id][1]*5, 
+                num_classes=12,
+                batch_size=batch_size, 
+                frame_step=frame_step,
+                output_signature=Utils.OUTPUT_SIGNATURE,
+                label_names=Utils.LABEL_NAMES)
+    
+    model.init_data('.mp4', "data/self/ercan", "data/self/roos", "data/self/joris")
+    model.init_base_model()
+    # try:
+    #     model.load_best_weights()
+    # except:
+    #     print('Weights not found, training instead.')
+    #     model.train()
+    #     model.load_best_weights()
+    
+    pg = ProposalGenerator(model.base_model, "data/self/short.mp4", 
+                           Utils.MOVINET_PARAMS[a_id][1]*5, Utils.MOVINET_PARAMS[a_id][0], 
+                           model.frame_step)
+    
+    unlabeled_ds = tf.data.Dataset.from_generator(pg, output_signature=Utils.GENERATOR_SIGNATURE)
+    unlabeled_ds = unlabeled_ds.batch(batch_size)
+   
+    model.unlabeled_ds = unlabeled_ds
+    for vid, start, stop in model.unlabeled_ds.unbatch():
+        print(vid.shape, start, stop)
+    
+    model.train()
 
-
-            yield processed_frames, start_index, stop_index
+    
+    
+    preds = model.predict(unlabeled_ds)
+    print(np.argmax(preds, axis=1))
+    
+    # baseline.train_ds = train_ds
+    # baseline.val_ds = train_ds
+    # baseline.test_ds = cpy
+    
+    #baseline.test()
+    #baseline.plot_confusion_matrix()
+    
+    
+    #TODO
+    #store actual frames in ds
+    #allow extending/cutting of frames, store in ds and to file
+    #also automatically and from and to previous instances. See how that works if continuously generated. 
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
