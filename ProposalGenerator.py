@@ -4,7 +4,7 @@ import numpy as np
 import tensorflow as tf
 
 class ProposalGenerator:
-    def __init__(self, model, path, n_frames, resolution, frame_step, extension='.avi'):
+    def __init__(self, model, path, n_frames, resolution, frame_step, extension='.mp4'):
 
         self.model = model
         self.path = path

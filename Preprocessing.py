@@ -92,19 +92,23 @@ def draw_bounding_box(path):
 
 def rotate_frame(frame, n):
     """Rotate a frame clockwise by n*90 degrees."""
-    return np.rot90(frame, k=n)
+    return np.rot90(frame, k=(4-n))
 
-def rotate_coordinates(coordinates, n):
+def rotate_coordinates(coordinates, n, rotated_frame):
     """Rotate a bounding box clockwise by n*90 degrees."""
     x, y, w, h = coordinates
-    if n % 4 == 1:
-        return y, x, h, w
-    elif n % 4 == 2:
-        return x + w, y + h, w, h
-    elif n % 4 == 3:
-        return y + h, x, h, w
-    else:
-        return x, y, w, h
+    if n == 1:
+        x, y = y, x
+        w, h = h, w
+        x = rotated_frame.shape[1] - x - w
+    elif n == 2:
+        x = rotated_frame.shape[1] - x - w
+        y = rotated_frame.shape[0] - y - h
+    elif n == 3:
+        x, y = y, x
+        w, h = h, w
+        y = rotated_frame.shape[0] - y - h
+    return x, y, w, h
 
 def crop_rotate_video(input_path, output_path):
     # Open the input video file and get some properties
@@ -138,9 +142,9 @@ def crop_rotate_video(input_path, output_path):
             # Close any open windows
             cv2.destroyAllWindows()
             break
-
-    coordinates = rotate_coordinates(coordinates, rotation_count)
-
+    print(coordinates)
+    coordinates = rotate_coordinates(coordinates, rotation_count, rotated_frame)
+    print(coordinates)
     # Create a new video writer object with the same properties as the input video
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     out = cv2.VideoWriter(output_path, fourcc, fps, (coordinates[2], coordinates[3]))
@@ -172,7 +176,7 @@ def crop_rotate_video(input_path, output_path):
     
 if __name__ == '__main__':
     path = "data/long/long.mp4"
-    out_path = "data/long/long_full/cropped_long.mp4"
+    out_path = "data/long/long_full/cropped.mp4"
     
     #coordinates = (227, 2, 747, 710)
     crop_rotate_video(path, out_path)
