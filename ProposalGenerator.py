@@ -75,6 +75,7 @@ class ProposalGenerator:
         stop_index = src.get(cv2.CAP_PROP_POS_FRAMES)
             
         #(processed_frames, start_index, stop_index)
+        print(starting_frame, stop_index)
         return np_result, int(starting_frame), int(stop_index)
     
     def __call__(self):
@@ -95,7 +96,8 @@ class ProposalGenerator:
             processed_frames, start_index, stop_index = self.sliding_frames_from_video(starting_frame, cap)
             starting_frame = stop_index+1
             
-            yield processed_frames, start_index, stop_index#, stop_index
+            print(start_index, stop_index)
+            yield processed_frames, start_index, stop_index
             
 if __name__ == '__main__':
     

@@ -25,6 +25,7 @@ class ActiveLearningModel(BaselineModel):
         self.num_samples = num_samples
         self.unlabeled_paths = []
         self.unlabeled_path = ""
+        os.makedirs('data/saved', exist_ok=True)
         
         for root, dirs, files in os.walk(data_path):
             for file in files:
@@ -37,22 +38,31 @@ class ActiveLearningModel(BaselineModel):
     
     def init_unlabeled_data(self, path, extension='.mp4'):
             unlabeled_ds = tf.data.Dataset.from_generator(ProposalGenerator(self.base_model, path, 
-                                   Utils.MOVINET_PARAMS[self.model_id][1]*5, Utils.MOVINET_PARAMS[self.model_id][0], 
+                                   self.num_frames, Utils.MOVINET_PARAMS[self.model_id][0], 
                                    self.frame_step), output_signature = Utils.GENERATOR_SIGNATURE)
             self.unlabeled_ds = unlabeled_ds.batch(self.batch_size)
     
     def get_labels(self, path, start_indices, stop_indices, samples):
         labels = []
+        return_samples = []
+        
+        if not os.path.exists('data/saved'):
+            os.mkdir('data/saved')
+        print("INDICES: ", start_indices, '\n', stop_indices)
+        input()
         #path = path.decode('utf-8')
         for i in range(len(start_indices)):
+        
             start, stop = start_indices[i], stop_indices[i]
+            
             #Print the labels and instructions
             def print_instructions():
                 os.system('cls' if os.name == 'nt' else 'clear')
                 print("LABELS")
                 for i in range(len(self.label_names)):
                     print(f'{i}: {self.label_names[i]}')
-                print("r: REPLAY")
+                print('s: SKIP snippet')
+                print("r: REPLAY snippet")
                 print("m: MODIFY start/stop")
                 print("o: OTHER class label (please enter)")
             
@@ -101,8 +111,8 @@ class ActiveLearningModel(BaselineModel):
                     
                 if not os.path.exists(vid_dir):
                     os.mkdir(vid_dir)
-                
-                out = cv2.VideoWriter(f"{vid_dir}/{time_str}.mp4", cv2.VideoWriter_fourcc(*'mp4v'), 30, (1280, 720))
+
+                out = cv2.VideoWriter(f"{vid_dir}/{time_str}.mp4", cv2.VideoWriter_fourcc(*'mp4v'), 30, (played_frames[0].shape[1], played_frames[0].shape[0]))
                 for frame in played_frames:
                     out.write(frame) # frame is a numpy.ndarray with shape (1280, 720, 3)
                 out.release()
@@ -114,9 +124,10 @@ class ActiveLearningModel(BaselineModel):
                     return
                 nonlocal labels
                 labels.append(label)
+                return_samples.append(samples[i])
                 save_video(played_frames, label)
                 
-            def change_video_length():
+            def change_video_length(change = ""):
                 os.system('cls' if os.name == 'nt' else 'clear')
                 print("Do you want to add or remove frames to the front or back")
                 print("First enter how many seconds you want to add/remove from the front")
@@ -124,8 +135,9 @@ class ActiveLearningModel(BaselineModel):
                 print("'-0.5' removes half a second, 2 adds two seconds")
                 print("For example,-0.5:2 to remove 0.5 seconds from front and add 2 seconds to the end.")
                 
-                change = input("Enter in format [s:s], 'q' to skip: ")
-                fps=30
+                if change == "":
+                    change = input("Enter in format [s:s], 'q' to skip: ")
+                
                 if (change == 'q') or (change == 'Q'):
                     return start, stop, False
                 else:
@@ -164,6 +176,7 @@ class ActiveLearningModel(BaselineModel):
                     played_frames = play_video(start, stop)
                                 
                     print_instructions()
+                    print("START/STOP", start, stop)
                     label_str = input("Please select label (number): ")
                     if label_str == 'r' or label_str == 'R':
                         continue
@@ -173,11 +186,23 @@ class ActiveLearningModel(BaselineModel):
                         if changed:
                             samples[i] = create_new_sample(start, stop)
                             continue
+                        
+                    if ":" in label_str:
+                        try:
+                            start, stop, changed = change_video_length(label_str)
+                            if changed:
+                                samples[i] = create_new_sample(start, stop)
+                                continue
+                        except:
+                            print("Not correct input for changing length, trying again")
+                            continue
                     
                     if label_str == 'o' or label_str == 'O':
                         other_label = input("Please enter class label in text (a-z): ")
                         save_video(played_frames, other_label)
-                        del samples[i]
+                        break
+                    
+                    if label_str == 's' or label_str == 'S':
                         break
                 
                     try: 
@@ -186,12 +211,11 @@ class ActiveLearningModel(BaselineModel):
                     except Exception as e:
                         print(f"This gave error {e}, please enter a valid label number")
                 
-                except Exception as e:
-                    print("Something went wrong with this label, skipping it: {e}")
+                except Exception as ex:
+                    print(f"Something went wrong with this label, skipping it: {ex}")
                     break
         
-        return np.array(labels), np.array(samples)
-                   
+        return np.array(labels), np.array(return_samples)                   
     
     def select_samples(self, labeled_ds, unlabeled_ds, num_samples):
         # Get predicted probabilities for unlabeled samples
@@ -201,14 +225,17 @@ class ActiveLearningModel(BaselineModel):
         starts = [start for _, start, _ in data]
         stops = [stop for _, _, stop in data]
         
+        print(list(zip(starts, stops)))
+        input('STATS/STOP SELEC_SAMPLES')
+        
         unlabeled_probs = tf.nn.softmax(self.base_model.predict(vids))
         # Get maximum entropy for each sample
         entropies = tf.math.log(unlabeled_probs) * unlabeled_probs
         entropies = tf.reduce_sum(entropies, axis=-1)
         # Select samples with highest entropy
         indices = tf.argsort(entropies, direction='ASCENDING')
-        selected_indices = indices[:num_samples]
-        selected_indices = tf.cast(indices[:num_samples], dtype=tf.int64)  # cast to int64
+        selected_indices = indices[:num_samples] #5 backup frames
+        #selected_indices = tf.cast(indices[:(num_samples+5)], dtype=tf.int64)  # cast to int64
     
         # Iterate over the dataset to extract frames and labels as numpy arrays
         processed_frames = []
@@ -277,7 +304,7 @@ class ActiveLearningModel(BaselineModel):
 
             print(f'Starting Active Learning loop {i+1}/{self.num_loops}')
             tf.keras.backend.clear_session()
-            self.unlabeled_path = self.unlabeled_paths.pop(np.random.randint(0, len(self.unlabeled_paths)-1))
+            self.unlabeled_path = self.unlabeled_paths.pop()
             self.init_unlabeled_data(self.unlabeled_path)
             self.labeled_ds, self.unlabeled_ds = self.select_samples(self.labeled_ds, self.unlabeled_ds, self.num_samples)
             
@@ -304,36 +331,36 @@ class ActiveLearningModel(BaselineModel):
         return results
     
 if __name__ == '__main__':
+    pass
+    # epochs_active_learning=1
+    # shots = 5
+    # drop_out = 0.5
+    # batch_size=16
+    # frame_step=3 #generate 2.5 second clips
+    # a_id='a2'
+    # loops=1
+    # num_samples=3
+    # unlabeled_path = 'data/long1.1.mp4'
     
-    epochs_active_learning=1
-    shots = 5
-    drop_out = 0.5
-    batch_size=16
-    frame_step=6
-    a_id='a2'
-    loops=1
-    num_samples=3
-    unlabeled_path = 'data/long1.1.mp4'
+    # model = ActiveLearningModel(
+    #             num_loops=loops, num_samples=num_samples,
+    #             data_path = 'data/long',
+    #             model_id=a_id, model_type="base", 
+    #             epochs=epochs_active_learning, shots=shots, 
+    #             dropout=drop_out, 
+    #             resolution=Utils.MOVINET_PARAMS[a_id][0], 
+    #             num_frames=Utils.MOVINET_PARAMS[a_id][1]*5, 
+    #             num_classes=12,
+    #             batch_size=batch_size, 
+    #             frame_step=frame_step,
+    #             output_signature=Utils.OUTPUT_SIGNATURE,
+    #             label_names=Utils.LABEL_NAMES)
     
-    model = ActiveLearningModel(
-                num_loops=loops, num_samples=num_samples,
-                data_path = 'data/long',
-                model_id=a_id, model_type="base", 
-                epochs=epochs_active_learning, shots=shots, 
-                dropout=drop_out, 
-                resolution=Utils.MOVINET_PARAMS[a_id][0], 
-                num_frames=Utils.MOVINET_PARAMS[a_id][1]*5, 
-                num_classes=12,
-                batch_size=batch_size, 
-                frame_step=frame_step,
-                output_signature=Utils.OUTPUT_SIGNATURE,
-                label_names=Utils.LABEL_NAMES)
-    
-    model.init_data('.mp4', "data/self/joris", "data/self/roos", "data/self/ercan")
-    model.init_base_model()
-    model.train()
-    model.test()
-    model.plot_confusion_matrix()
+    # model.init_data('.mp4', "data/self/joris", "data/self/roos", "data/self/ercan")
+    # model.init_base_model()
+    # model.train()
+    # model.test()
+    # model.plot_confusion_matrix()
 
     
     
@@ -355,4 +382,35 @@ if __name__ == '__main__':
 #     end_time = (i + 1) * part_duration
 #     part = video.subclip(start_time, end_time)
 #     part.write_videofile(f"data/long/long3.{i+1}.mp4")
+
+
+# import os
+# import pandas as pd
+# from moviepy.video.io.VideoFileClip import VideoFileClip
+
+# # Define input and output paths
+# video_path = "/path/to/video.mp4"
+# excel_path = "/path/to/excel_file.xlsx"
+# output_folder = "/path/to/output_folder"
+
+# # Read Excel file into a pandas dataframe
+# df = pd.read_excel(excel_path)
+
+# # Iterate over each row of the dataframe
+# for i, row in df.iterrows():
+#     start_time = row['start_time']
+#     duration = row['duration']
+#     label = row['label']
+    
+#     # Create the output folder if it does not exist
+#     folder_path = os.path.join(output_folder, label)
+#     os.makedirs(folder_path, exist_ok=True)
+    
+#     # Define the output file path
+#     output_path = os.path.join(folder_path, f"{label}_{i}.mp4")
+    
+#     # Extract the video snippet using moviepy
+#     with VideoFileClip(video_path) as video:
+#         snippet = video.subclip(start_time, start_time + duration)
+#         snippet.write_videofile(output_path)
 

@@ -50,6 +50,7 @@ def frames_from_video_file(video_path, n_frames, output_size, frame_step = 15):
   src = cv2.VideoCapture(str(video_path))  
 
   video_length = src.get(cv2.CAP_PROP_FRAME_COUNT)
+  frame_step = int(video_length/n_frames)
   
   need_length = 1 + (n_frames-1) * frame_step
 
@@ -61,9 +62,9 @@ def frames_from_video_file(video_path, n_frames, output_size, frame_step = 15):
 
   src.set(cv2.CAP_PROP_POS_FRAMES, start)
   # ret is a boolean indicating whether read was successful, frame is the image itself
-#  ret, frame = src.read()
+  ret, frame = src.read()
 #  result.append(format_frames(frame, output_size))
-
+    
   for _ in range(n_frames - 1):
     for _ in range(frame_step):
       ret, frame = src.read()

@@ -29,7 +29,7 @@ parser.add_argument('--no-training', '-nt', action='store_true', help='Disable t
 
 # Add an option for data batch size
 parser.add_argument('--batch-size', '-bs', type=int, default=16, metavar='N', help='Batch size of datasets for training and testing (default: 16)')
-parser.add_argument('--frame-step', '-fs', type=int, default=5, metavar='N', help='Step with which frames are skipped in frame generator (default: 5)')
+parser.add_argument('--clip-length', '-cl', type=int, default=3, metavar='N', help='Target length of clips, used to compute num_frames(target-fps*cl) per snippet (default: 3)')
 parser.add_argument('--drop-out', '-do', type=float, default=0.5, metavar='P', help='floating-point dropout probability (default: 0.5)')
 
 
@@ -55,11 +55,14 @@ print(f"num-samples: {args.num_samples}")
 print()
 print(f"no-training: {args.no_training}")
 print(f"batch-size: {args.batch_size}")
-print(f"frame-step: {args.frame_step}")
+print(f"clip-length: {args.clip_length}")
 print(f"drop-out: {args.drop_out}")
 print("----------")
 
 #python Main.py -b a0 a1 a2 a3 a4 a5 -a a3 --epochs-active-learning 5 --loops 1 --num-samples 3 -f a1 a2 a3 --epochs-few-shot 1 --meta-training-task-numbers 5
+
+
+FPS = 30
 if __name__ == '__main__':
     
     # Parse the arguments
@@ -76,6 +79,8 @@ if __name__ == '__main__':
     # args.epochs_baseline=20
     # args.batch_size=16
     # args.drop_out = 0.5
+
+
     
     if args.baseline:
         b_models = [BaselineModel(
@@ -83,10 +88,10 @@ if __name__ == '__main__':
                     epochs=args.epochs_baseline, shots=args.shots, 
                     dropout=args.drop_out, 
                     resolution=Utils.MOVINET_PARAMS[b_id][0], 
-                    num_frames=Utils.MOVINET_PARAMS[b_id][1]*5, 
+                    num_frames=Utils.MOVINET_PARAMS[b_id][1]*args.clip_length, 
                     num_classes=12,
                     batch_size=args.batch_size, 
-                    frame_step=args.frame_step,
+                    frame_step=int(FPS/Utils.MOVINET_PARAMS[b_id][1]),
                     output_signature=Utils.OUTPUT_SIGNATURE,
                     label_names=Utils.LABEL_NAMES) 
         for b_id in args.baseline]
@@ -94,15 +99,15 @@ if __name__ == '__main__':
     if args.active_learning:
         a_models = [ActiveLearningModel(
                     num_loops=args.loops, num_samples=args.num_samples,
-                    data_path='data/long/',
+                    data_path='data/long/long_full',
                     model_id=a_id, model_type="base", 
                     epochs=args.epochs_active_learning, shots=args.shots, 
                     dropout=args.drop_out, 
                     resolution=Utils.MOVINET_PARAMS[a_id][0], 
-                    num_frames=Utils.MOVINET_PARAMS[a_id][1]*5, 
+                    num_frames=Utils.MOVINET_PARAMS[a_id][1]*args.clip_length, 
                     num_classes=12,
                     batch_size=args.batch_size, 
-                    frame_step=args.frame_step,
+                    frame_step=int(FPS/Utils.MOVINET_PARAMS[a_id][1]),
                     output_signature=Utils.OUTPUT_SIGNATURE,
                     label_names=Utils.LABEL_NAMES) 
         for a_id in args.active_learning]
@@ -114,10 +119,10 @@ if __name__ == '__main__':
                     epochs=args.epochs_few_shot, shots=args.shots, 
                     dropout=args.drop_out, 
                     resolution=Utils.MOVINET_PARAMS[f_id][0], 
-                    num_frames=Utils.MOVINET_PARAMS[f_id][1]*5, 
+                    num_frames=Utils.MOVINET_PARAMS[f_id][1]*args.clip_length, 
                     num_classes=12,
                     batch_size=args.batch_size,
-                    frame_step=args.frame_step,
+                    frame_step=int(FPS/Utils.MOVINET_PARAMS[f_id][1]),
                     output_signature=Utils.OUTPUT_SIGNATURE,
                     label_names=Utils.LABEL_NAMES) 
         for f_id in args.few_shot_learning]
