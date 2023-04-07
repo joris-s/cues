@@ -19,12 +19,12 @@ from official.projects.movinet.modeling import movinet_model
 from sklearn.metrics import confusion_matrix
 
 OUTPUT_SIGNATURE = (tf.TensorSpec(shape = (None, None, None, 3), dtype = tf.float32),
-                    tf.TensorSpec(shape = (), dtype = tf.int16),
+                    tf.TensorSpec(shape = (), dtype = tf.int32),
                     tf.TensorSpec(shape = (), dtype = tf.string))
 
 GENERATOR_SIGNATURE = (tf.TensorSpec(shape = (None, None, None, 3), dtype = tf.float32), 
-                       tf.TensorSpec(shape = (), dtype = tf.int16), 
-                       tf.TensorSpec(shape = (), dtype = tf.int16))
+                       tf.TensorSpec(shape = (), dtype = tf.int32), 
+                       tf.TensorSpec(shape = (), dtype = tf.int32))
 
 MOVINET_PARAMS = {
     'a0': (172, 5),

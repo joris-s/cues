@@ -41,6 +41,7 @@ class ActiveLearningModel(BaselineModel):
                                    self.num_frames, Utils.MOVINET_PARAMS[self.model_id][0], 
                                    self.frame_step), output_signature = Utils.GENERATOR_SIGNATURE)
             self.unlabeled_ds = unlabeled_ds.batch(self.batch_size)
+
     
     def get_labels(self, path, start_indices, stop_indices, samples):
         labels = []
@@ -48,9 +49,7 @@ class ActiveLearningModel(BaselineModel):
         
         if not os.path.exists('data/saved'):
             os.mkdir('data/saved')
-        print("INDICES: ", start_indices, '\n', stop_indices)
-        input()
-        #path = path.decode('utf-8')
+
         for i in range(len(start_indices)):
         
             start, stop = start_indices[i], stop_indices[i]
@@ -224,9 +223,7 @@ class ActiveLearningModel(BaselineModel):
         vids = np.array([v for v, _, _ in data])
         starts = [start for _, start, _ in data]
         stops = [stop for _, _, stop in data]
-        
-        print(list(zip(starts, stops)))
-        input('STATS/STOP SELEC_SAMPLES')
+    
         
         unlabeled_probs = tf.nn.softmax(self.base_model.predict(vids))
         # Get maximum entropy for each sample
@@ -272,7 +269,7 @@ class ActiveLearningModel(BaselineModel):
         unlabeled_ds = unlabeled_ds.batch(self.batch_size)
         
         selected_frames_tensor = tf.constant(selected_samples)
-        selected_labels_tensor = tf.convert_to_tensor(selected_labels, dtype=tf.int16)
+        selected_labels_tensor = tf.convert_to_tensor(selected_labels, dtype=tf.int32)
         selected_paths_tensor = tf.constant(np.array([f'class_{label}.mp4' for label in selected_labels]))
         
         labeled_ds = labeled_ds.unbatch().concatenate(tf.data.Dataset.from_tensor_slices((selected_frames_tensor, selected_labels_tensor, selected_paths_tensor)))

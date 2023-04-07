@@ -4,7 +4,7 @@ import numpy as np
 import tensorflow as tf
 
 class ProposalGenerator:
-    def __init__(self, model, path, n_frames, resolution, frame_step, extension='.mp4'):
+    def __init__(self, model, path, n_frames, resolution, frame_step, extension='.avi'):
 
         self.model = model
         self.path = path
@@ -69,13 +69,9 @@ class ProposalGenerator:
             label = next_label #assume that lengthening the snippet does not chagne predicted label since label==next_label
             next_label = np.argmax(self.model.predict(np_next_result[np.newaxis, :])[0])
             
-            
-
-
         stop_index = src.get(cv2.CAP_PROP_POS_FRAMES)
             
         #(processed_frames, start_index, stop_index)
-        print(starting_frame, stop_index)
         return np_result, int(starting_frame), int(stop_index)
     
     def __call__(self):
@@ -96,7 +92,6 @@ class ProposalGenerator:
             processed_frames, start_index, stop_index = self.sliding_frames_from_video(starting_frame, cap)
             starting_frame = stop_index+1
             
-            print(start_index, stop_index)
             yield processed_frames, start_index, stop_index
             
 if __name__ == '__main__':
