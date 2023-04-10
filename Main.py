@@ -79,8 +79,6 @@ if __name__ == '__main__':
     # args.epochs_baseline=20
     # args.batch_size=16
     # args.drop_out = 0.5
-
-
     
     if args.baseline:
         b_models = [BaselineModel(
@@ -99,7 +97,7 @@ if __name__ == '__main__':
     if args.active_learning:
         a_models = [ActiveLearningModel(
                     num_loops=args.loops, num_samples=args.num_samples,
-                    data_path='data/long/long_full',
+                    data_path=Utils.UNLABELED_FOLDER,
                     model_id=a_id, model_type="base", 
                     epochs=args.epochs_active_learning, shots=args.shots, 
                     dropout=args.drop_out, 

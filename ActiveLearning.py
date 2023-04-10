@@ -47,8 +47,8 @@ class ActiveLearningModel(BaselineModel):
         labels = []
         return_samples = []
         
-        if not os.path.exists('data/saved'):
-            os.mkdir('data/saved')
+        if not os.path.exists(Utils.SNIPPET_FOLDER):
+            os.mkdir(Utils.SNIPPET_FOLDER)
 
         for i in range(len(start_indices)):
         
@@ -103,15 +103,16 @@ class ActiveLearningModel(BaselineModel):
             def save_video(played_frames, label):
                 now=datetime.datetime.now()
                 time_str = now.strftime("%H:%M:%S").replace(":", "_")
+                name = self.unlabeled_path.split('/')[-1] + f"_{time_str}"
                 if type(label) == str:
-                    vid_dir = f'data/saved/{label}'
+                    vid_dir = f'{Utils.LABELED_FOLDER}_other/{label}'
                 else:
-                    vid_dir = f'data/saved/{Utils.LABEL_NAMES[label]}'
+                    vid_dir = f'{Utils.LABELED_FOLDER}/{Utils.LABEL_NAMES[label]}'
                     
                 if not os.path.exists(vid_dir):
                     os.mkdir(vid_dir)
 
-                out = cv2.VideoWriter(f"{vid_dir}/{time_str}.mp4", cv2.VideoWriter_fourcc(*'mp4v'), 30, (played_frames[0].shape[1], played_frames[0].shape[0]))
+                out = cv2.VideoWriter(f"{vid_dir}/{name}.mp4", cv2.VideoWriter_fourcc(*'mp4v'), 30, (played_frames[0].shape[1], played_frames[0].shape[0]))
                 for frame in played_frames:
                     out.write(frame) # frame is a numpy.ndarray with shape (1280, 720, 3)
                 out.release()
@@ -285,28 +286,9 @@ class ActiveLearningModel(BaselineModel):
 
         loss_obj = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
         optimizer = tf.keras.optimizers.Adam(0.001)
-
         self.base_model.compile(loss=loss_obj, optimizer=optimizer, metrics=['accuracy'])
 
-        train, val = Utils.remove_paths(self.labeled_ds), Utils.remove_paths(self.val_ds)
-        results = self.base_model.fit(train,
-                            validation_data=val,
-                            epochs=self.epochs,
-                            callbacks=[model_checkpoint, early_stopping, reduce_lr],
-                            validation_freq=1,
-                            verbose=1)
-
         for i in range(self.num_loops):
-            os.system('cls' if os.name == 'nt' else 'clear')
-
-            print(f'Starting Active Learning loop {i+1}/{self.num_loops}')
-            tf.keras.backend.clear_session()
-            self.unlabeled_path = self.unlabeled_paths.pop()
-            self.init_unlabeled_data(self.unlabeled_path)
-            self.labeled_ds, self.unlabeled_ds = self.select_samples(self.labeled_ds, self.unlabeled_ds, self.num_samples)
-            
-            os.system('cls' if os.name == 'nt' else 'clear')
-            print(f'Continuing training loop {i+1}/{self.num_loops}')
 
             train, val = Utils.remove_paths(self.labeled_ds), Utils.remove_paths(self.val_ds)
             self.base_model.optimizer.lr = 0.001
@@ -316,6 +298,17 @@ class ActiveLearningModel(BaselineModel):
                                 callbacks=[model_checkpoint, early_stopping, reduce_lr],
                                 validation_freq=1,
                                 verbose=1)
+
+            os.system('cls' if os.name == 'nt' else 'clear')
+
+            print(f'Starting Active Learning loop {i+1}/{self.num_loops}')
+            tf.keras.backend.clear_session()
+            self.unlabeled_path = self.unlabeled_paths.pop()
+            self.init_unlabeled_data(self.unlabeled_path)
+            self.labeled_ds, self.unlabeled_ds = self.select_samples(self.labeled_ds, self.unlabeled_ds, self.num_samples)
+            
+            os.system('cls' if os.name == 'nt' else 'clear')
+            
 
         self.base_model.optimizer.lr = 0.001
         results = self.base_model.fit(train,
@@ -327,47 +320,11 @@ class ActiveLearningModel(BaselineModel):
         
         return results
     
-if __name__ == '__main__':
-    pass
-    # epochs_active_learning=1
-    # shots = 5
-    # drop_out = 0.5
-    # batch_size=16
-    # frame_step=3 #generate 2.5 second clips
-    # a_id='a2'
-    # loops=1
-    # num_samples=3
-    # unlabeled_path = 'data/long1.1.mp4'
-    
-    # model = ActiveLearningModel(
-    #             num_loops=loops, num_samples=num_samples,
-    #             data_path = 'data/long',
-    #             model_id=a_id, model_type="base", 
-    #             epochs=epochs_active_learning, shots=shots, 
-    #             dropout=drop_out, 
-    #             resolution=Utils.MOVINET_PARAMS[a_id][0], 
-    #             num_frames=Utils.MOVINET_PARAMS[a_id][1]*5, 
-    #             num_classes=12,
-    #             batch_size=batch_size, 
-    #             frame_step=frame_step,
-    #             output_signature=Utils.OUTPUT_SIGNATURE,
-    #             label_names=Utils.LABEL_NAMES)
-    
-    # model.init_data('.mp4', "data/self/joris", "data/self/roos", "data/self/ercan")
-    # model.init_base_model()
-    # model.train()
-    # model.test()
-    # model.plot_confusion_matrix()
-
-    
-    
-    # preds = model.predict(unlabeled_ds)
-    # print(np.argmax(preds, axis=1))
-    
+   
 # from moviepy.video.io.VideoFileClip import VideoFileClip
 
 # # Load the video
-# video = VideoFileClip("data/long/long3.mp4")
+# video = VideoFileClip("data/long_med/long3.mp4")
 
 # # Get the duration and calculate the duration of each part
 # duration = video.duration
@@ -381,33 +338,7 @@ if __name__ == '__main__':
 #     part.write_videofile(f"data/long/long3.{i+1}.mp4")
 
 
-# import os
-# import pandas as pd
-# from moviepy.video.io.VideoFileClip import VideoFileClip
 
-# # Define input and output paths
-# video_path = "/path/to/video.mp4"
-# excel_path = "/path/to/excel_file.xlsx"
-# output_folder = "/path/to/output_folder"
 
-# # Read Excel file into a pandas dataframe
-# df = pd.read_excel(excel_path)
 
-# # Iterate over each row of the dataframe
-# for i, row in df.iterrows():
-#     start_time = row['start_time']
-#     duration = row['duration']
-#     label = row['label']
-    
-#     # Create the output folder if it does not exist
-#     folder_path = os.path.join(output_folder, label)
-#     os.makedirs(folder_path, exist_ok=True)
-    
-#     # Define the output file path
-#     output_path = os.path.join(folder_path, f"{label}_{i}.mp4")
-    
-#     # Extract the video snippet using moviepy
-#     with VideoFileClip(video_path) as video:
-#         snippet = video.subclip(start_time, start_time + duration)
-#         snippet.write_videofile(output_path)
 

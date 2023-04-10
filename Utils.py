@@ -39,6 +39,9 @@ LABEL_NAMES = ['blinking', 'frown', 'fussy', 'grimace', 'hand', 'looking', 'mout
 
 META_CLASSES = 20
 
+LABELED_FOLDER = 'data/slapi/labeled'
+UNLABELED_FOLDER = 'data/slapi/unlabeled'
+
 def format_frames(frame, output_size):
   frame = tf.image.convert_image_dtype(frame, tf.float32)
   frame = tf.image.resize_with_pad(frame, *output_size)

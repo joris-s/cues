@@ -1,8 +1,10 @@
 import cv2
 import numpy as np
 import random
-
-
+import os
+import pandas as pd
+import datetime
+from moviepy.editor import VideoFileClip
 
 def draw_bounding_box(path):
     # Initialize the video capture object
@@ -130,7 +132,9 @@ def crop_rotate_video(input_path, output_path):
         rotated_frame = rotate_frame(frame, rotation_count)
 
         # Display the rotated frame and wait for user input
-        cv2.imshow('Rotated Video', rotated_frame)
+        cv2.namedWindow("Rotate", cv2.WND_PROP_FULLSCREEN)
+        cv2.setWindowProperty('Rotate', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+        cv2.imshow('Rotate', rotated_frame)
         key = cv2.waitKey(0) & 0xFF
 
         # If the user pressed 'r', increment the number of rotations
@@ -154,8 +158,8 @@ def crop_rotate_video(input_path, output_path):
         ret, frame = cap.read()
         if not ret:
             break
-        if cap.get(cv2.CAP_PROP_POS_FRAMES) == 300:
-            break
+        # if cap.get(cv2.CAP_PROP_POS_FRAMES) == 300:
+        #     break
 
         # Rotate the frame by the final number of rotations
         rotated_frame = rotate_frame(frame, rotation_count)
@@ -171,12 +175,46 @@ def crop_rotate_video(input_path, output_path):
     cap.release()
     out.release()
 
+def create_snippets(path, annotation_file, output_folder):
+    
+
+
+    # Define input and output paths
+    video_path = "data/long/long_med/long3.mp4"
+    excel_path = "annotation.xlsx"
+
+    # Read Excel file into a pandas dataframe
+    df = pd.read_excel(excel_path)
+
+    for i, row in df.iterrows():
+        time_val = row['Time']
+        duration = row['Duration']
+        behaviour = row['Behaviour']
+        
+        # Create the output folder if it does not exist
+        folder_path = os.path.join(output_folder, behaviour)
+        os.makedirs(folder_path, exist_ok=True)
+        
+        # Define the output file path
+        output_path = os.path.join(folder_path, f'{behaviour}_{datetime.now().strftime("%H_%M_%S")}.mp4')
+        
+        # Convert time to datetime object
+        datetime_val = datetime.datetime.combine(datetime.date.today(), time_val)
+        duration_val = datetime.datetime.combine(datetime.date.today(), duration)
+        start = (datetime_val.hour, datetime_val.minute, datetime_val.second)
+        end = (start[0] + duration_val.hour, start[1] + duration_val.minute, start[2] + duration_val.second)
+        
+        # Extract the video snippet using moviepy
+        with VideoFileClip(video_path) as video:
+            snippet = video.subclip(start, end)
+            snippet.write_videofile(output_path)
+    
     
 
     
 if __name__ == '__main__':
     path = "data/long/long.mp4"
-    out_path = "data/long/long_full/cropped.mp4"
+    out_path = "data/slapi/unlabeled/417_cropped.mp4"
     
-    #coordinates = (227, 2, 747, 710)
-    crop_rotate_video(path, out_path)
+    #crop_rotate_video(path, out_path)
+    create_snippets(out_path, 'annotation.xlsx', 'data/slapi/labeled')
