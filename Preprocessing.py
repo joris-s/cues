@@ -175,46 +175,53 @@ def crop_rotate_video(input_path, output_path):
     cap.release()
     out.release()
 
-def create_snippets(path, annotation_file, output_folder):
-    
+def create_snippets(excel_path, data_folder, output_folder):
+    # Read Excel file into a dictionary of dataframes, one for each sheet
+    sheets = pd.read_excel(excel_path, sheet_name=None)
+
+    for sheet_name, df in sheets.items():
+        # Extract video name from sheet name
+        video_name = sheet_name.strip()
+
+        # Find all files that end in video_name.mp4 in the output folder
+        video_paths = [os.path.join(output_folder, f) for f in os.listdir(data_folder)
+                       if f.endswith(f'{video_name}.mp4')]
+
+        if not video_paths:
+            print(f"No video found for {video_name}")
+            continue
+
+        for i, row in df.iterrows():
+            time_val = row['Time']
+            duration = row['Duration']
+            behaviour = row['Behaviour']
+
+            # Create the output folder if it does not exist
+            folder_path = os.path.join(output_folder, video_name, behaviour)
+            os.makedirs(folder_path, exist_ok=True)
 
 
-    # Define input and output paths
-    video_path = "data/long/long_med/long3.mp4"
-    excel_path = "annotation.xlsx"
 
-    # Read Excel file into a pandas dataframe
-    df = pd.read_excel(excel_path)
+            # Convert time to datetime object
+            datetime_val = datetime.datetime.combine(datetime.date.today(), time_val)
+            duration_val = datetime.datetime.combine(datetime.date.today(), duration)
+            start = (datetime_val.hour, datetime_val.minute, datetime_val.second)
+            end = (start[0] + duration_val.hour, start[1] + duration_val.minute, start[2] + duration_val.second)
 
-    for i, row in df.iterrows():
-        time_val = row['Time']
-        duration = row['Duration']
-        behaviour = row['Behaviour']
-        
-        # Create the output folder if it does not exist
-        folder_path = os.path.join(output_folder, behaviour)
-        os.makedirs(folder_path, exist_ok=True)
-        
-        # Define the output file path
-        output_path = os.path.join(folder_path, f'{behaviour}_{datetime.now().strftime("%H_%M_%S")}.mp4')
-        
-        # Convert time to datetime object
-        datetime_val = datetime.datetime.combine(datetime.date.today(), time_val)
-        duration_val = datetime.datetime.combine(datetime.date.today(), duration)
-        start = (datetime_val.hour, datetime_val.minute, datetime_val.second)
-        end = (start[0] + duration_val.hour, start[1] + duration_val.minute, start[2] + duration_val.second)
-        
-        # Extract the video snippet using moviepy
-        with VideoFileClip(video_path) as video:
-            snippet = video.subclip(start, end)
-            snippet.write_videofile(output_path)
+            # Extract the video snippet using moviepy
+            for video_path in video_paths:
+                with VideoFileClip(video_path) as video:
+                    snippet = video.subclip(start, end)
+                    output_path = os.path.join(folder_path, f'{behaviour}_{datetime.datetime.now().strftime("%H_%M_%S")}.mp4')
+                    snippet.write_videofile(output_path)
+
     
     
 
     
 if __name__ == '__main__':
     path = "data/long/long.mp4"
-    out_path = "data/slapi/unlabeled/417_cropped.mp4"
+    out_path = "data/slapi/unlabeled/cropped_417_top.mp4"
     
     #crop_rotate_video(path, out_path)
     create_snippets(out_path, 'annotation.xlsx', 'data/slapi/labeled')
