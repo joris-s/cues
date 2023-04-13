@@ -3,6 +3,7 @@ import Utils
 from pathlib import Path
 from sklearn.metrics import balanced_accuracy_score
 
+
 class BaselineModel:
     
     name:str
@@ -53,7 +54,7 @@ class BaselineModel:
         loss_obj = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
         optimizer = tf.keras.optimizers.Adam(0.001)
 
-        early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=3)
+        early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=5)
         model_checkpoint = tf.keras.callbacks.ModelCheckpoint(filepath=self.checkpoint_dir+self.weights_file, 
                                                               monitor='val_loss', save_weights_only=True, save_best_only=True)
         
@@ -144,84 +145,3 @@ class BaselineModel:
             self.actual, self.predicted = Utils.get_actual_predicted_labels(self.test_ds, self.base_model)
             Utils.cm_heatmap(self.actual, self.predicted, self.label_names, savefig, 
                        (f'Confusion Matrix {self.name} for {self.model_id} - %.2f Acc' % self.test_acc))
-
-if __name__ == '__main__':
-
-    
-    """-----------------------------------"""
-    """         STREAMING                 """
-    """-----------------------------------"""
-    
-# baseline.init_streaming_model()
-# video = Utils.load_video('data/self/long/long.mp4')
-# images = tf.split(video[tf.newaxis], video.shape[0], axis=1)
-# images = images[0::15]
-# init_states = baseline.stream_model.init_states(video[tf.newaxis].shape)
-
-# all_logits = []
-
-# # # To run on a video, pass in one frame at a time
-# states = init_states
-# for i in range(len(images)):
-#      print(f"{i}/{len(images)}")
-#      # predictions for each frame
-#      image = images[i]
-#      logits, states = baseline.stream_model({**states, 'image': image})
-#      #logits = baseline.base_model({'image': image})
-#      all_logits.append(logits)
-
-# # concatinating all the logits
-# logits = tf.concat(all_logits, 0)
-# # estimating probabilities
-# probs = tf.nn.softmax(logits, axis=-1)
-# labels = baseline.label_names
-
-
-# # Generate a plot and output to a video tensor
-# plot_video = Utils.plot_streaming_top_preds(np.repeat(probs, 15, axis=0), video, labels=labels, video_fps=15., top_k=12)
-# # For gif format, set codec='gif'
-# Utils.save_to_video(plot_video)
-
-# import cv2
-# cap = cv2.VideoCapture('data/self/long/long.mp4')
-# num_frames = 10
-# step = 5
-# class_labels = ['frown', 'frown', 'frown', 'frown', 'frown', 'frown', 'frown', 'frown', 'frown', 'frown']
-# # Loop over the frames from the video capture device
-# while True:
-#     # Read a frame from the video capture device
-#     frames = []    
-#     ret, frame = cap.read()
-
-#     # If the frame was not successfully read, break out of the loop
-#     if not ret:
-#         break
-#     # Preprocess the frame
-    
-#     for _ in range(num_frames):
-#         for _ in range(step):
-#             ret, frame = cap.read()
-#         if ret:
-#           input_frame = Utils.preprocess_frame(frame)
-#           frames.append(input_frame)
-          
-#     input_frames = np.stack(frames, axis = 1)
- 
-#     # Make a prediction with the model
-#     prediction = baseline.base_model.predict(input_frames)
-#     # Get the class label with the highest probability
-#     pred = np.argmax(prediction)
-#     class_labels.append(labels[pred])
-#     class_labels = class_labels[1:5]
-#     class_label = max(set(class_labels), key = class_labels.count)
-#     # Display the class label on the frame
-#     cv2.putText(frame, str(class_label), (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 255, 0), 2)
-#     # Display the frame
-#     cv2.imshow('Video Feed', frame)
-#     # If the 'q' key is pressed, break out of the loop
-#     if cv2.waitKey(1) & 0xFF == ord('q'):
-#         break
-
-# # Release
-# cap.release()
-# cv2.destroyAllWindows()

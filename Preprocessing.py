@@ -5,6 +5,8 @@ import os
 import pandas as pd
 import datetime
 from moviepy.editor import VideoFileClip
+import Utils
+
 
 def draw_bounding_box(path):
     # Initialize the video capture object
@@ -184,7 +186,7 @@ def create_snippets(excel_path, data_folder, output_folder):
         video_name = sheet_name.strip()
 
         # Find all files that end in video_name.mp4 in the output folder
-        video_paths = [os.path.join(output_folder, f) for f in os.listdir(data_folder)
+        video_paths = [os.path.join(data_folder, f) for f in os.listdir(data_folder)
                        if f.endswith(f'{video_name}.mp4')]
 
         if not video_paths:
@@ -197,7 +199,7 @@ def create_snippets(excel_path, data_folder, output_folder):
             behaviour = row['Behaviour']
 
             # Create the output folder if it does not exist
-            folder_path = os.path.join(output_folder, video_name, behaviour)
+            folder_path = os.path.join(output_folder, behaviour)
             os.makedirs(folder_path, exist_ok=True)
 
 
@@ -212,16 +214,13 @@ def create_snippets(excel_path, data_folder, output_folder):
             for video_path in video_paths:
                 with VideoFileClip(video_path) as video:
                     snippet = video.subclip(start, end)
-                    output_path = os.path.join(folder_path, f'{behaviour}_{datetime.datetime.now().strftime("%H_%M_%S")}.mp4')
+                    output_path = f'{output_folder}/{behaviour}/{behaviour}_{datetime.datetime.now().strftime("%H_%M_%S")}.mp4'
                     snippet.write_videofile(output_path)
 
     
     
 
     
-if __name__ == '__main__':
-    path = "data/long/long.mp4"
-    out_path = "data/slapi/unlabeled/cropped_417_top.mp4"
-    
+if __name__ == '__main__':  
     #crop_rotate_video(path, out_path)
-    create_snippets(out_path, 'annotation.xlsx', 'data/slapi/labeled')
+    create_snippets('cues_annotation_jstab.xlsx', Utils.UNLABELED_FOLDER, Utils.LABELED_FOLDER)

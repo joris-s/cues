@@ -5,7 +5,6 @@ import cv2
 from Baseline import BaselineModel
 import os
 from ProposalGenerator import ProposalGenerator
-from pathlib import Path
 import datetime
 
 
@@ -47,8 +46,8 @@ class ActiveLearningModel(BaselineModel):
         labels = []
         return_samples = []
         
-        if not os.path.exists(Utils.SNIPPET_FOLDER):
-            os.mkdir(Utils.SNIPPET_FOLDER)
+        if not os.path.exists(Utils.AL_FOLDER):
+            os.mkdir(Utils.AL_FOLDER)
 
         for i in range(len(start_indices)):
         
@@ -100,14 +99,12 @@ class ActiveLearningModel(BaselineModel):
                 
                 return frames
             
+            #Save the video
             def save_video(played_frames, label):
                 now=datetime.datetime.now()
                 time_str = now.strftime("%H:%M:%S").replace(":", "_")
                 name = self.unlabeled_path.split('/')[-1] + f"_{time_str}"
-                if type(label) == str:
-                    vid_dir = f'{Utils.LABELED_FOLDER}_other/{label}'
-                else:
-                    vid_dir = f'{Utils.LABELED_FOLDER}/{Utils.LABEL_NAMES[label]}'
+                vid_dir = f'{Utils.AL_FOLDER}/{Utils.LABEL_NAMES[label]}'
                     
                 if not os.path.exists(vid_dir):
                     os.mkdir(vid_dir)
@@ -150,8 +147,8 @@ class ActiveLearningModel(BaselineModel):
                     
                 return start+change_start, change_end+stop, True
             
+            # Create a new sample after cutting/adding frames            
             def create_new_sample(start, stop):
-                #step = (stop-start)/self.n_frames
                 result = []
                 cap = cv2.VideoCapture(path)
                 cap.set(cv2.CAP_PROP_POS_FRAMES, start)
@@ -176,7 +173,6 @@ class ActiveLearningModel(BaselineModel):
                     played_frames = play_video(start, stop)
                                 
                     print_instructions()
-                    print("START/STOP", start, stop)
                     label_str = input("Please select label (number): ")
                     if label_str == 'r' or label_str == 'R':
                         continue
@@ -319,26 +315,3 @@ class ActiveLearningModel(BaselineModel):
                             verbose=1)
         
         return results
-    
-   
-# from moviepy.video.io.VideoFileClip import VideoFileClip
-
-# # Load the video
-# video = VideoFileClip("data/long_med/long3.mp4")
-
-# # Get the duration and calculate the duration of each part
-# duration = video.duration
-# part_duration = duration / 3
-
-# # Cut the video into three parts and save them
-# for i in range(3):
-#     start_time = i * part_duration
-#     end_time = (i + 1) * part_duration
-#     part = video.subclip(start_time, end_time)
-#     part.write_videofile(f"data/long/long3.{i+1}.mp4")
-
-
-
-
-
-

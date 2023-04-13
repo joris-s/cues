@@ -1,8 +1,3 @@
-#https://www.tensorflow.org/tutorials/video/transfer_learning_with_movinet
-# Load pre-trained weights
-#!wget https://storage.googleapis.com/tf_model_garden/vision/movinet/movinet_a0_base.tar.gz -O movinet_a0_base.tar.gz -q
-#!tar -xvf movinet_a0_base.tar.gz
-
 import tensorflow as tf
 import Utils
 from pathlib import Path
@@ -13,7 +8,6 @@ class FewShotModel(BaselineModel):
     
     meta_train_ds: tf.data.Dataset
     meta_val_ds: tf.data.Dataset
-    meta_test_ds: tf.data.Dataset
     
     meta_classes: int
     tasks: int
@@ -26,7 +20,7 @@ class FewShotModel(BaselineModel):
         self.tasks = tasks
         self.meta_classes = meta_classes
         
-    def init_meta_data(self, extension, train_path = "", val_path = "", test_path = ""):
+    def init_meta_data(self, extension, train_path = "", val_path = ""):
         if train_path != "":
             meta_train_ds = tf.data.Dataset.from_generator(Utils.FrameGenerator(Path(train_path), self.num_frames, 
                                                                            training = True, 
@@ -44,20 +38,12 @@ class FewShotModel(BaselineModel):
                                                                               frame_step=self.frame_step),
                                                              output_signature = self.output_signature)
             self.meta_val_ds = meta_val_ds.batch(self.batch_size)
-            
-        if test_path != "":
-            meta_test_ds = tf.data.Dataset.from_generator(Utils.FrameGenerator(Path(test_path), self.num_frames,  
-                                                                           resolution = self.resolution,
-                                                                               extension=extension,
-                                                                               frame_step=self.frame_step),
-                                                             output_signature = self.output_signature)
-            self.meta_test_ds = meta_test_ds.batch(self.batch_size)
         
     def train(self):
         loss_obj = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
         optimizer = tf.keras.optimizers.Adam(0.001)
 
-        early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=3)
+        early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=5)
         model_checkpoint = tf.keras.callbacks.ModelCheckpoint(filepath=self.checkpoint_dir+self.weights_file, 
                                                               monitor='val_loss', save_weights_only=True, save_best_only=True)
         
@@ -71,7 +57,7 @@ class FewShotModel(BaselineModel):
             
             # Filter the train_ds and test_ds datasets to keep only the selected classes
             filtered_train_ds = self.meta_train_ds.unbatch().filter(lambda x, y, path: tf.reduce_any(tf.equal(tf.cast(y, tf.int32), selected_class_indices)))
-            filtered_test_ds = self.meta_test_ds.unbatch().filter(lambda x, y, path: tf.reduce_any(tf.equal(tf.cast(y, tf.int32), selected_class_indices)))
+            filtered_test_ds = self.meta_val_ds.unbatch().filter(lambda x, y, path: tf.reduce_any(tf.equal(tf.cast(y, tf.int32), selected_class_indices)))
 
             # Reset the class labels of the filtered_train_ds and filtered_test_ds datasets
             def reset_labels(x, y, path):
@@ -85,7 +71,8 @@ class FewShotModel(BaselineModel):
             filtered_train_ds = filtered_train_ds.batch(self.batch_size)
             filtered_test_ds = filtered_test_ds.batch(self.batch_size)
             
-            filtered_train_ds, filtered_test_ds = Utils.remove_paths(filtered_train_ds, filtered_test_ds)
+            filtered_train_ds = Utils.remove_paths(filtered_train_ds)
+            filtered_test_ds = Utils.remove_paths(filtered_test_ds)
              
             results = self.base_model.fit(filtered_train_ds,
                             validation_data=filtered_test_ds,
@@ -95,7 +82,8 @@ class FewShotModel(BaselineModel):
             
             print(f"---Task {i+1}/{self.tasks}---")
 
-        train, val = Utils.remove_paths(self.train_ds, self.val_ds)
+        train = Utils.remove_paths(self.train_ds)
+        val = Utils.remove_paths(self.val_ds)
 
         results = self.base_model.fit(train,
                         validation_data=val,

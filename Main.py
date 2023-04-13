@@ -4,6 +4,7 @@ from ActiveLearning import ActiveLearningModel
 import Utils
 import argparse
 
+
 parser = argparse.ArgumentParser(description='Run machine learning models with different approaches')
 
 # Define the flags
@@ -17,7 +18,7 @@ parser.add_argument('--epochs-active-learning', '-ea', type=int, default=5, meta
 parser.add_argument('--epochs-baseline', '-eb', type=int, default=5, metavar='N', help='Number of epochs for baseline approach (default: 5)')
 
 # Define arguments for few-shot learning
-parser.add_argument('--meta-training-task-numbers', '-mt', type=int, default=5, metavar='N', help='Number of meta-training tasks for few-shot learning approach (default: 5)')
+parser.add_argument('--meta-tasks', '-mt', type=int, default=5, metavar='N', help='Number of meta-training tasks for few-shot learning approach (default: 5)')
 parser.add_argument('--shots', '-sh', type=int, default=3, metavar='N', help='Number of meta-training data instances for few-shot learning approach, use -1 to use all samples (default: 3)')
 
 # Define arguments for active-learning
@@ -47,7 +48,7 @@ print(f"epochs for few-shot-learning: {args.epochs_few_shot}")
 print(f"epochs for active-learning: {args.epochs_active_learning}")
 print(f"epochs for baseline: {args.epochs_baseline}")
 print()
-print(f"meta-training task numbers: {args.meta_training_task_numbers}")
+print(f"meta-training task numbers: {args.meta_tasks}")
 print(f"shots: {args.shots}")
 print()
 print(f"loops: {args.loops}")
@@ -61,24 +62,13 @@ print("----------")
 
 #python Main.py -b a0 a1 a2 a3 a4 a5 -a a3 --epochs-active-learning 5 --loops 1 --num-samples 3 -f a1 a2 a3 --epochs-few-shot 1 --meta-training-task-numbers 5
 
-
-FPS = 30
 if __name__ == '__main__':
     
-    # Parse the arguments
     args = parser.parse_args()
     
     b_models=[]
     a_models=[]
     f_models=[]
-    
-    #this setting works well, seems val_loss can keep up with train_loss
-    # args.baseline=['a2']
-    # args.shots=-1
-    # args.frame_step=Utils.MOVINET_PARAMS['a2'][1]
-    # args.epochs_baseline=20
-    # args.batch_size=16
-    # args.drop_out = 0.5
     
     if args.baseline:
         b_models = [BaselineModel(
@@ -87,9 +77,9 @@ if __name__ == '__main__':
                     dropout=args.drop_out, 
                     resolution=Utils.MOVINET_PARAMS[b_id][0], 
                     num_frames=Utils.MOVINET_PARAMS[b_id][1]*args.clip_length, 
-                    num_classes=12,
+                    num_classes=len(Utils.LABEL_NAMES),
                     batch_size=args.batch_size, 
-                    frame_step=int(FPS/Utils.MOVINET_PARAMS[b_id][1]),
+                    frame_step=int(Utils.FPS/Utils.MOVINET_PARAMS[b_id][1]),
                     output_signature=Utils.OUTPUT_SIGNATURE,
                     label_names=Utils.LABEL_NAMES) 
         for b_id in args.baseline]
@@ -103,24 +93,24 @@ if __name__ == '__main__':
                     dropout=args.drop_out, 
                     resolution=Utils.MOVINET_PARAMS[a_id][0], 
                     num_frames=Utils.MOVINET_PARAMS[a_id][1]*args.clip_length, 
-                    num_classes=12,
+                    num_classes=len(Utils.LABEL_NAMES),
                     batch_size=args.batch_size, 
-                    frame_step=int(FPS/Utils.MOVINET_PARAMS[a_id][1]),
+                    frame_step=int(Utils.FPS/Utils.MOVINET_PARAMS[a_id][1]),
                     output_signature=Utils.OUTPUT_SIGNATURE,
                     label_names=Utils.LABEL_NAMES) 
         for a_id in args.active_learning]
     
     if args.few_shot_learning:
         f_models = [FewShotModel(
-                    tasks=args.meta_training_task_numbers, meta_classes=Utils.META_CLASSES,
+                    tasks=args.meta_tasks, meta_classes=Utils.META_CLASSES,
                     model_id=f_id, model_type="base", 
                     epochs=args.epochs_few_shot, shots=args.shots, 
                     dropout=args.drop_out, 
                     resolution=Utils.MOVINET_PARAMS[f_id][0], 
                     num_frames=Utils.MOVINET_PARAMS[f_id][1]*args.clip_length, 
-                    num_classes=12,
+                    num_classes=len(Utils.LABEL_NAMES),
                     batch_size=args.batch_size,
-                    frame_step=int(FPS/Utils.MOVINET_PARAMS[f_id][1]),
+                    frame_step=int(Utils.FPS/Utils.MOVINET_PARAMS[f_id][1]),
                     output_signature=Utils.OUTPUT_SIGNATURE,
                     label_names=Utils.LABEL_NAMES) 
         for f_id in args.few_shot_learning]
@@ -131,9 +121,9 @@ if __name__ == '__main__':
         
         print(f'Starting on {model.model_id} model of type {model.name}')
         
-        model.init_data('.mp4', "data/self/ercan", "data/self/roos", "data/self/joris")
+        model.init_data('.mp4', Utils.TRAIN_FOLDER, Utils.val_FOLDER, Utils.TEST_FOLDER)
         if model.name == 'FSL':
-            model.init_meta_data('.avi', "data/UCF_meta_learning/train", "data/UCF_meta_learning/test", "data/UCF_meta_learning/test")
+            model.init_meta_data('.avi', Utils.META_TRAIN_FOLDER, Utils.META_VAL_FOLDER)
         model.init_base_model()
         if not args.no_training:
             model.train()
