@@ -6,6 +6,7 @@ from Baseline import BaselineModel
 import os
 from ProposalGenerator import ProposalGenerator
 import datetime
+from sklearn.metrics import pairwise_distances
 
 
 class ActiveLearningModel(BaselineModel):
@@ -24,7 +25,7 @@ class ActiveLearningModel(BaselineModel):
         self.num_samples = num_samples
         self.unlabeled_paths = []
         self.unlabeled_path = ""
-        os.makedirs('data/saved', exist_ok=True)
+        os.makedirs(Utils.AL_FOLDER, exist_ok=True)
         
         for root, dirs, files in os.walk(data_path):
             for file in files:
@@ -103,8 +104,14 @@ class ActiveLearningModel(BaselineModel):
             def save_video(played_frames, label):
                 now=datetime.datetime.now()
                 time_str = now.strftime("%H:%M:%S").replace(":", "_")
-                name = self.unlabeled_path.split('/')[-1] + f"_{time_str}"
-                vid_dir = f'{Utils.AL_FOLDER}/{Utils.LABEL_NAMES[label]}'
+                name = f"{time_str}-{self.unlabeled_path[-7:-4]}"
+
+                if type(label) == str:
+                    vid_dir = f'{Utils.AL_FOLDER}/{label}'
+                    name = f'{label}-{name}'
+                else:
+                    vid_dir = f'{Utils.AL_FOLDER}/{Utils.LABEL_NAMES[label]}'
+                    name = f'{Utils.LABEL_NAMES[label]}-{name}'
                     
                 if not os.path.exists(vid_dir):
                     os.mkdir(vid_dir)
@@ -214,23 +221,34 @@ class ActiveLearningModel(BaselineModel):
         return np.array(labels), np.array(return_samples)                   
     
     def select_samples(self, labeled_ds, unlabeled_ds, num_samples):
-        # Get predicted probabilities for unlabeled samples
-        #unlabeled_frames = Utils.remove_indices(unlabeled_ds)
+
         data = [d for d in unlabeled_ds.unbatch()]
         vids = np.array([v for v, _, _ in data])
         starts = [start for _, start, _ in data]
         stops = [stop for _, _, stop in data]
     
+        def uncertainty_sampling(vids, num_samples):
+                
+            unlabeled_probs = tf.nn.softmax(self.base_model(vids))
+            # Get maximum entropy for each sample
+            entropies = tf.math.log(unlabeled_probs) * unlabeled_probs
+            entropies = tf.reduce_sum(entropies, axis=-1)
+            # Select samples with highest entropy
+            indices = tf.argsort(entropies, direction='ASCENDING')
+            return indices[:num_samples]
         
-        unlabeled_probs = tf.nn.softmax(self.base_model.predict(vids))
-        # Get maximum entropy for each sample
-        entropies = tf.math.log(unlabeled_probs) * unlabeled_probs
-        entropies = tf.reduce_sum(entropies, axis=-1)
-        # Select samples with highest entropy
-        indices = tf.argsort(entropies, direction='ASCENDING')
-        selected_indices = indices[:num_samples] #5 backup frames
-        #selected_indices = tf.cast(indices[:(num_samples+5)], dtype=tf.int64)  # cast to int64
-    
+        def diversity_sampling(vids, num_samples, k=5):
+            
+            features = self.base_model.backbone(vids)
+            features = np.array([np.array(f).flatten() for f in features[0]['head']])
+            
+            distance_matrix = pairwise_distances(features)
+            diversity_scores = np.mean(np.sort(distance_matrix)[:, 1:k+1], axis=1)
+            return np.argsort(diversity_scores)[-num_samples:]
+            
+        selected_indices = uncertainty_sampling(vids, num_samples)
+        #selected_indices = diversity_sampling(vids, num_samples)
+
         # Iterate over the dataset to extract frames and labels as numpy arrays
         processed_frames = []
         start_indices = []
@@ -270,7 +288,7 @@ class ActiveLearningModel(BaselineModel):
         selected_paths_tensor = tf.constant(np.array([f'class_{label}.mp4' for label in selected_labels]))
         
         labeled_ds = labeled_ds.unbatch().concatenate(tf.data.Dataset.from_tensor_slices((selected_frames_tensor, selected_labels_tensor, selected_paths_tensor)))
-        labeled_ds = labeled_ds.batch(self.batch_size)
+        labeled_ds = labeled_ds.shuffle(buffer_size=len(vids)+len(selected_samples)).batch(self.batch_size)
         return labeled_ds, unlabeled_ds
     
     def train(self):

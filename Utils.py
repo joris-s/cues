@@ -4,17 +4,15 @@ import numpy as np
 import tensorflow as tf
 import seaborn as sns
 import os
-import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix
+import matplotlib.pyplot as plt
+import matplotlib
+if os.name != 'nt':
+    matplotlib.use('tkagg')
 
 # Set font parameters for Matplotlib
 params = {"font.serif" : ["Computer Modern Serif"]}
 plt.rcParams.update(params)
-
-# Check for operating system
-if os.name != 'nt':
-    import matplotlib as mpl
-    mpl.use('tkagg')
 
 # Import the MoViNet model from TensorFlow Models (tf-models-official) for the MoViNet model
 from official.projects.movinet.modeling import movinet
@@ -57,7 +55,7 @@ META_TRAIN_FOLDER = 'data/UCF-101/train'
 META_VAL_FOLDER = 'data/UCF-101/val'
 AL_FOLDER = 'data/slapi/active-learning'
 
-LABEL_NAMES = sorted(os.listdir(LABELED_FOLDER))
+LABEL_NAMES = sorted(os.listdir(TRAIN_FOLDER))
 
 """*****************************************
 *      Frame Generator Functions           *

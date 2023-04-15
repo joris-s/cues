@@ -65,7 +65,7 @@ print("----------")
 if __name__ == '__main__':
     
     args = parser.parse_args()
-    
+
     b_models=[]
     a_models=[]
     f_models=[]
@@ -121,7 +121,7 @@ if __name__ == '__main__':
         
         print(f'Starting on {model.model_id} model of type {model.name}')
         
-        model.init_data('.mp4', Utils.TRAIN_FOLDER, Utils.val_FOLDER, Utils.TEST_FOLDER)
+        model.init_data('.mp4', Utils.TRAIN_FOLDER, Utils.VAL_FOLDER, Utils.TEST_FOLDER)
         if model.name == 'FSL':
             model.init_meta_data('.avi', Utils.META_TRAIN_FOLDER, Utils.META_VAL_FOLDER)
         model.init_base_model()
