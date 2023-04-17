@@ -41,7 +41,7 @@ class FewShotModel(BaselineModel):
         
     def train(self):
         loss_obj = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-        optimizer = tf.keras.optimizers.Adam(0.001)
+        optimizer = tf.keras.optimizers.experimental.SGD()
 
         early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=5)
         model_checkpoint = tf.keras.callbacks.ModelCheckpoint(filepath=self.checkpoint_dir+self.weights_file, 

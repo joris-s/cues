@@ -175,10 +175,8 @@ def get_actual_predicted_labels(dataset, model):
 *****************************************"""
 
 def remove_paths(ds):
-    # Define a function to select only the frames and labels from each element of the dataset
     def select_frames_and_labels(frames, labels, paths):
         return frames, labels
-    # Apply the function to each element of the dataset
     return ds.map(select_frames_and_labels)
 
 def remove_indices(ds):
@@ -206,7 +204,7 @@ def cm_heatmap(actual, predicted, labels, savefigs=False, name='heatmap'):
     ax.yaxis.set_ticklabels(labels)
     
     if savefigs:
-        plt.savefig('figs/'+name+'.png', bbox_inches='tight', dpi=600)
+        plt.savefig('figs/cm/'+name+'.png', bbox_inches='tight', dpi=600)
     plt.close()    
     #plt.show()
     
@@ -218,7 +216,7 @@ def AIPCreateBackboneAndClassifierModel(model_id, num_classes, frames_number, ba
                                         train_whole_model, dropout,
                                         checkpoint_dir,
                                         conv_type: str = '3d', se_type: str = '3d', activation: str = 'swish',
-                                        gating_activation: str = 'sigmoid', stream_mode=False, input_specs=None, load_pretrained_weights=True, training = True):
+                                        gating_activation: str = 'sigmoid', stream_mode=False, load_pretrained_weights=True, training=True):
   '''
   Create video analysis model
   Return: movinet model
@@ -229,11 +227,8 @@ def AIPCreateBackboneAndClassifierModel(model_id, num_classes, frames_number, ba
                             causal=stream_mode,
                             conv_type=conv_type,
                             se_type=se_type,
-                            #input_specs=input_specs,
                             activation=activation,
                             gating_activation=gating_activation,
-                            #use_sync_bn=True,
-                            #use_positional_encoding=True,
                             use_external_states=stream_mode
                             )
 
@@ -250,7 +245,6 @@ def AIPCreateBackboneAndClassifierModel(model_id, num_classes, frames_number, ba
  
   model = movinet_model.MovinetClassifier(
         backbone=backbone, 
-        #input_specs=input_specs,
         activation=activation,
         num_classes=num_classes, 
         output_states=stream_mode,
