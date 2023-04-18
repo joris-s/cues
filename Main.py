@@ -127,11 +127,13 @@ if __name__ == '__main__':
         model.init_base_model()
         if not args.no_training:
             model.train()
+            model.plot_train_val()
         try:
             model.load_best_weights()
         except:
             print('Weights not found, training instead.')
             model.train()
+            model.plot_train_val()
             model.load_best_weights()
         model.test()
         model.plot_confusion_matrix()

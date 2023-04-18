@@ -30,6 +30,7 @@ class BaselineModel:
     output_signature: list
     
     test_acc: float
+    history: dict
     
     def __init__(self, model_id, model_type, epochs, shots, dropout,
                  resolution, num_frames, num_classes, label_names, batch_size, 
@@ -51,6 +52,8 @@ class BaselineModel:
         self.output_signature = output_signature
     
     def train(self):
+        performance_history = {'loss': [], 'val_loss': [], 'accuracy': [], 'val_accuracy': []}
+        
         loss_obj = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
         optimizer = tf.keras.optimizers.Adam(0.001)
 
@@ -61,8 +64,11 @@ class BaselineModel:
         train, val = Utils.remove_paths(self.train_ds), Utils.remove_paths(self.val_ds)
         
         labels = [int(label) for _, label in train.unbatch()]
-        class_weight = {i: 1/(labels.count(i)/len(labels)) for i in range(len(list(set(labels))))}
-        
+        total_labels = len(labels)
+        class_weights = {i: 1/(labels.count(i)/total_labels) for i in range(len(list(set(labels))))}
+        class_weight_sum = sum(class_weights.values())
+        class_weight = {k: v/class_weight_sum for k, v in class_weights.items()}
+          
         self.base_model.compile(loss=loss_obj, optimizer=optimizer, metrics=['accuracy'])
         results = self.base_model.fit(train,
                             validation_data=val,
@@ -72,7 +78,9 @@ class BaselineModel:
                             class_weight=class_weight,
                             verbose=1)
         
-        return results
+        for key in results.history.keys():
+            performance_history[key].extend(results.history[key])
+        self.history = performance_history
     
     def test(self):
         test = Utils.remove_paths(self.test_ds)
@@ -85,9 +93,6 @@ class BaselineModel:
         
     def load_best_weights(self):
         self.base_model.load_weights(self.checkpoint_dir+self.weights_file)
-    
-    def generate_segment(self):
-        pass
     
     def init_base_model(self):
         self.base_model = Utils.AIPCreateBackboneAndClassifierModel(model_id=self.model_id, 
@@ -141,12 +146,20 @@ class BaselineModel:
                                                              output_signature = self.output_signature)
             self.test_ds = test_ds.batch(self.batch_size)
             
+    # Modified plot_train_val function
+    def plot_train_val(self, savefig=True):
+        title = f'Training history of {self.name} for {self.model_id.upper()}'
+        try:
+            Utils.plot_train_val(self.history, title, savefig)
+        except Exception as e:
+            print(f'History not available, not making plots... {e}')
+        
     def plot_confusion_matrix(self, savefig=True):
         try:
             Utils.cm_heatmap(self.actual, self.predicted, self.label_names, savefig, 
-                       (f'Confusion Matrix {self.name} for {self.model_id} - %.2f Acc' % self.test_acc))
+                       (f'Confusion Matrix {self.name} for {self.model_id.upper()} - %.2f Acc' % self.test_acc))
         except Exception as e:
             print(f"We found the error: {e}\nNow doing testing again...")
-            self.actual, self.predicted = Utils.get_actual_predicted_labels(self.test_ds, self.base_model)
+            self.test()
             Utils.cm_heatmap(self.actual, self.predicted, self.label_names, savefig, 
-                       (f'Confusion Matrix {self.name} for {self.model_id} - %.2f Acc' % self.test_acc))
+                       (f'Confusion Matrix {self.name} for {self.model_id.upper()} - %.2f Acc' % self.test_acc))

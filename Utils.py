@@ -5,14 +5,15 @@ import tensorflow as tf
 import seaborn as sns
 import os
 from sklearn.metrics import confusion_matrix
+from pathlib import Path
 import matplotlib.pyplot as plt
 import matplotlib
 if os.name != 'nt':
     matplotlib.use('tkagg')
 
 # Set font parameters for Matplotlib
-params = {"font.serif" : ["Computer Modern Serif"]}
-plt.rcParams.update(params)
+plt.rc('font', family='serif')
+plt.rcParams.update({'font.size': 12})
 
 # Import the MoViNet model from TensorFlow Models (tf-models-official) for the MoViNet model
 from official.projects.movinet.modeling import movinet
@@ -21,7 +22,6 @@ from official.projects.movinet.modeling import movinet_model
 """*****************************************
 *            Define Constants              *
 *****************************************"""
-
 OUTPUT_SIGNATURE = (
   tf.TensorSpec(shape = (None, None, None, 3), dtype = tf.float32),
   tf.TensorSpec(shape = (), dtype = tf.int32),
@@ -47,10 +47,10 @@ FPS = 30
 META_CLASSES = 101
 
 LABELED_FOLDER = 'data/slapi/labeled'
-UNLABELED_FOLDER = 'data/slapi/unlabeled'
-TRAIN_FOLDER = 'data/slapi/train'
-VAL_FOLDER = 'data/slapi/val'
-TEST_FOLDER = 'data/slapi/test'
+UNLABELED_FOLDER = 'data/self/long_med'
+TRAIN_FOLDER = 'data/self/joris'
+VAL_FOLDER = 'data/self/ercan'
+TEST_FOLDER = 'data/self/roos'
 META_TRAIN_FOLDER = 'data/UCF-101/train'
 META_VAL_FOLDER = 'data/UCF-101/val'
 AL_FOLDER = 'data/slapi/active-learning'
@@ -60,43 +60,45 @@ LABEL_NAMES = sorted(os.listdir(TRAIN_FOLDER))
 """*****************************************
 *      Frame Generator Functions           *
 *****************************************"""
-
 def format_frames(frame, output_size):
-  frame = tf.image.convert_image_dtype(frame, tf.float32)
-  frame = tf.image.resize_with_pad(frame, *output_size)
-  return frame
+    frame = tf.image.convert_image_dtype(frame, tf.float32)
+    frame = tf.image.resize_with_pad(frame, *output_size)
+    return frame
 
-def frames_from_video_file(video_path, n_frames, output_size, frame_step = 15):
-  # Read each video frame by frame
-  result = []
-  src = cv2.VideoCapture(str(video_path))  
+def frames_from_video_file(video_path, n_frames, output_size, frame_step=15):
+    result = []
+    src = cv2.VideoCapture(str(video_path))
 
-  video_length = src.get(cv2.CAP_PROP_FRAME_COUNT)
-  frame_step = int(video_length/n_frames)
-  
-  need_length = 1 + (n_frames-1) * frame_step
+    if not src.isOpened():
+        print(f"Error: Could not open the video file {video_path}.")
+        return result
 
-  if need_length > video_length:
-    start = 0
-  else:
-    max_start = video_length - need_length
-    start = random.randint(0, max_start + 1)
+    video_length = int(src.get(cv2.CAP_PROP_FRAME_COUNT))
+    frame_step = int(video_length / n_frames)
 
-  src.set(cv2.CAP_PROP_POS_FRAMES, start)
-  ret, frame = src.read()
-    
-  for _ in range(n_frames - 1):
-    for _ in range(frame_step):
-      ret, frame = src.read()
-    if ret:
-      frame = format_frames(frame, output_size)
-      result.append(frame)
+    need_length = 1 + (n_frames - 1) * frame_step
+
+    if need_length > video_length:
+        start = 0
     else:
-      result.append(np.zeros_like(result[0]))
-  src.release()
-  result = np.array(result)[..., [2, 1, 0]]
+        max_start = video_length - need_length
+        start = random.randint(0, max_start + 1)
 
-  return result
+    src.set(cv2.CAP_PROP_POS_FRAMES, start)
+    ret, frame = src.read()
+
+    for _ in range(n_frames - 1):
+        for _ in range(frame_step):
+            ret, frame = src.read()
+        if ret:
+            frame = format_frames(frame, output_size)
+            result.append(frame)
+        else:
+            result.append(np.zeros_like(result[0]))
+    src.release()
+    result = np.array(result)[..., [2, 1, 0]]
+
+    return result
 
 def filter_examples_per_class(examples_list, max_examples_per_class):
     num_examples_per_class = {}
@@ -107,60 +109,49 @@ def filter_examples_per_class(examples_list, max_examples_per_class):
             filtered_list.append(example)
     return filtered_list
 
-
 class FrameGenerator:
-  def __init__(self, path, n_frames, resolution, training = False, extension='.mp4', shots=-1, frame_step=15):
+    def __init__(self, path, n_frames, resolution, training=False, extension='.mp4', shots=-1, frame_step=15):
+        self.path = Path(path)
+        self.n_frames = n_frames
+        self.resolution = resolution
+        self.training = training
+        self.extension = extension
+        self.shots = shots
+        self.frame_step = frame_step
+        self.class_names = sorted(set(p.name for p in self.path.iterdir() if p.is_dir()))
+        self.class_ids_for_name = dict((name, idx) for idx, name in enumerate(self.class_names))
+        self.old_pairs = -1
 
-    self.path = path
-    self.n_frames = n_frames
-    self.resolution = resolution
-    self.training = training
-    self.extension = extension
-    self.shots = shots
-    self.frame_step = frame_step
-    self.class_names = sorted(set(p.name for p in self.path.iterdir() if p.is_dir()))
-    self.class_ids_for_name = dict((name, idx) for idx, name in enumerate(self.class_names))
-    self.old_pairs = -1
+    def get_files_and_class_names(self):
+        video_paths = list(self.path.glob('*/*' + self.extension))
+        classes = [p.parent.name for p in video_paths]
+        return video_paths, classes
 
-  def get_files_and_class_names(self):
-    video_paths = list(self.path.glob('*/*'+self.extension))
-    classes = [p.parent.name for p in video_paths] 
-    return video_paths, classes
+    def __call__(self):
+        video_paths, classes = self.get_files_and_class_names()
 
-  def __call__(self):
-    video_paths, classes = self.get_files_and_class_names()
-    
-    pairs = list(zip(video_paths, classes))
-    if self.old_pairs == -1:
-        self.old_pairs = pairs
-        
-    assert pairs == (self.old_pairs)
-    self.old_pairs = pairs.copy()
-    
-    if self.shots != -1:
-        pairs = filter_examples_per_class(pairs, self.shots)
+        pairs = list(zip(video_paths, classes))
+        if self.old_pairs == -1:
+            self.old_pairs = pairs
 
-    if self.training:
-      random.shuffle(pairs)
+        assert pairs == self.old_pairs
+        self.old_pairs = pairs.copy()
 
-    for path, name in pairs:
-      video_frames = frames_from_video_file(path, self.n_frames, output_size=(self.resolution, self.resolution), frame_step=self.frame_step) 
-      label = self.class_ids_for_name[name] # Encode labels
-      yield video_frames, label, path.__str__()
-      
+        if self.shots != -1:
+            pairs = filter_examples_per_class(pairs, self.shots)
 
+        if self.training:
+            random.shuffle(pairs)
 
+        for path, name in pairs:
+            video_frames = frames_from_video_file(path, self.n_frames, output_size=(self.resolution, self.resolution), frame_step=self.frame_step)
+            label = self.class_ids_for_name[name]  # Encode labels
+            yield video_frames, label, path.__str__()
 
+"""*****************************************
+*             Helper Functions             *
+*****************************************"""
 def get_actual_predicted_labels(dataset, model):
-    """
-      Create a list of actual ground truth values and the predictions from the model.
-    
-      Args:
-        dataset: An iterable data structure, such as a TensorFlow Dataset, with features and labels.
-    
-      Return:
-        Ground truth and predicted values for a particular dataset.
-    """
     actual = [labels for _, labels in dataset.unbatch()]
     predicted = model.predict(dataset)
     
@@ -169,10 +160,6 @@ def get_actual_predicted_labels(dataset, model):
     predicted = tf.argmax(predicted, axis=1)
     
     return actual, predicted
-
-"""*****************************************
-*             Helper Functions             *
-*****************************************"""
 
 def remove_paths(ds):
     def select_frames_and_labels(frames, labels, paths):
@@ -184,8 +171,8 @@ def remove_indices(ds):
         return frames
     return ds.map(select_frames)
 
-
 def cm_heatmap(actual, predicted, labels, savefigs=False, name='heatmap'):
+    plt.clf()
     cm_num = confusion_matrix(actual, predicted)
     cm = []
     for i in range(len(cm_num)):
@@ -206,7 +193,43 @@ def cm_heatmap(actual, predicted, labels, savefigs=False, name='heatmap'):
     if savefigs:
         plt.savefig('figs/cm/'+name+'.png', bbox_inches='tight', dpi=600)
     plt.close()    
-    #plt.show()
+    plt.clf()
+    
+# Modified plot_train_val function
+def plot_train_val(history, title, savefigs=False):
+    # Create figure and axis objects
+    plt.clf()
+    fig, ax = plt.subplots(1, 2, figsize=(12, 5))
+
+    # Plot train and validation loss
+    ax[0].plot(history['loss'], label='Train', marker='o')
+    ax[0].plot(history['val_loss'], label='Validation', marker='o')
+    ax[0].set_title('Loss')
+    ax[0].set_xlabel('Epoch')
+    ax[0].set_ylabel('Loss')
+    ax[0].set_ylim([0, 3])  # Adjust the y-axis limits
+    ax[0].set_xticks(np.arange(len(history['loss'])))
+
+    # Plot train and validation accuracy
+    ax[1].plot(history['accuracy'], label='Train', marker='o')
+    ax[1].plot(history['val_accuracy'], label='Validation', marker='o')
+    ax[1].set_title('Accuracy')
+    ax[1].set_xlabel('Epoch')
+    ax[1].set_ylabel('Accuracy')
+    ax[1].set_ylim([0, 1])  # Adjust the y-axis limits
+    ax[1].set_xticks(np.arange(len(history['accuracy'])))
+
+    # Add legend and title
+    ax[0].legend(loc='best', fontsize='large')
+    ax[1].legend(loc='best', fontsize='large')
+    fig.suptitle(title, fontsize=16)
+
+
+    fig.tight_layout()
+    if savefigs:
+        plt.savefig('figs/loss/'+title+'.png', dpi=600)
+    plt.close() 
+    plt.clf()
     
 """*****************************************
 *             MoViNet Helpers              *

@@ -40,56 +40,41 @@ class FewShotModel(BaselineModel):
             self.meta_val_ds = meta_val_ds.batch(self.batch_size)
         
     def train(self):
+        performance_history = {'loss': [], 'val_loss': [], 'accuracy': [], 'val_accuracy': []}
+
         loss_obj = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-        optimizer = tf.keras.optimizers.experimental.SGD()
+        optimizer = tf.keras.optimizers.Adam(lr=1e-4)
 
         early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=5)
         model_checkpoint = tf.keras.callbacks.ModelCheckpoint(filepath=self.checkpoint_dir+self.weights_file, 
                                                               monitor='val_loss', save_weights_only=True, save_best_only=True)
         
         self.base_model.compile(loss=loss_obj, optimizer=optimizer, metrics=['accuracy'])
-        
+
+        def reset_labels(x, y, path):
+            new_y = tf.reduce_min(tf.where(tf.equal(selected_class_indices, tf.cast(y, tf.int32))))
+            return (x, new_y, path)
+
         for i in range(self.tasks):
             tf.keras.backend.clear_session()
-            
-            # Generate a list of 5 random class indices
-            selected_class_indices = tf.random.shuffle(tf.range(self.meta_classes))[:self.num_classes]
-            
-            # Filter the train_ds and test_ds datasets to keep only the selected classes
-            filtered_train_ds = self.meta_train_ds.unbatch().filter(lambda x, y, path: tf.reduce_any(tf.equal(tf.cast(y, tf.int32), selected_class_indices)))
-            filtered_test_ds = self.meta_val_ds.unbatch().filter(lambda x, y, path: tf.reduce_any(tf.equal(tf.cast(y, tf.int32), selected_class_indices)))
 
-            # Reset the class labels of the filtered_train_ds and filtered_test_ds datasets
-            def reset_labels(x, y, path):
-                new_y = tf.reduce_min(tf.where(tf.equal(selected_class_indices, tf.cast(y, tf.int32))))
-                return (x, new_y, path)
-            
-            filtered_train_ds = filtered_train_ds.map(reset_labels)
-            filtered_test_ds = filtered_test_ds.map(reset_labels)
-            
-            # Batch again 
-            filtered_train_ds = filtered_train_ds.batch(self.batch_size)
-            filtered_test_ds = filtered_test_ds.batch(self.batch_size)
-            
-            filtered_train_ds = Utils.remove_paths(filtered_train_ds)
-            filtered_test_ds = Utils.remove_paths(filtered_test_ds)
-             
-            results = self.base_model.fit(filtered_train_ds,
-                            validation_data=filtered_test_ds,
-                            epochs=1,
-                            validation_freq=1,
-                            verbose=1)
-            
+            selected_class_indices = tf.random.shuffle(tf.range(self.meta_classes))[:self.num_classes]
+
+            filtered_train_ds = self.meta_train_ds.unbatch().filter(lambda x, y, path: tf.reduce_any(tf.equal(tf.cast(y, tf.int32), selected_class_indices))).map(reset_labels).batch(self.batch_size)
+            filtered_test_ds = self.meta_val_ds.unbatch().filter(lambda x, y, path: tf.reduce_any(tf.equal(tf.cast(y, tf.int32), selected_class_indices))).map(reset_labels).batch(self.batch_size)
+
+            results = self.base_model.fit(Utils.remove_paths(filtered_train_ds),
+                                          validation_data=Utils.remove_paths(filtered_test_ds),
+                                          epochs=1, verbose=1)
             print(f"---Task {i+1}/{self.tasks}---")
 
-        train = Utils.remove_paths(self.train_ds)
-        val = Utils.remove_paths(self.val_ds)
-
-        results = self.base_model.fit(train,
-                        validation_data=val,
-                        epochs=self.epochs,
-                        callbacks=[model_checkpoint, early_stopping],
-                        validation_freq=1,
-                        verbose=1)
+        self.base_model.optimizer.lr = 0.001
+        results = self.base_model.fit(Utils.remove_paths(self.train_ds),
+                                      validation_data=Utils.remove_paths(self.val_ds),
+                                      epochs=self.epochs,
+                                      callbacks=[model_checkpoint, early_stopping],
+                                      verbose=1)
         
-        return results
+        for key in results.history.keys():
+            performance_history[key].extend(results.history[key])
+        self.history = performance_history
