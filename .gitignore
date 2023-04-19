@@ -164,4 +164,4 @@ delete/
 cues/
 anaconda3/
 figs/
-*.hdf5
+MoViNets/**/*.hdf5
