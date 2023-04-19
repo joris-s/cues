@@ -231,6 +231,14 @@ def plot_train_val(history, title, savefigs=False):
     plt.close() 
     plt.clf()
     
+def get_class_weights(ds):
+    labels = [int(label) for _, label in ds.unbatch()]
+    total_labels = len(labels)
+    class_weights = {i: 1/(labels.count(i)/total_labels) for i in range(len(list(set(labels))))}
+    class_weight_sum = sum(class_weights.values())
+    class_weight = {k: v/class_weight_sum for k, v in class_weights.items()}
+    return class_weight
+    
 """*****************************************
 *             MoViNet Helpers              *
 *****************************************"""

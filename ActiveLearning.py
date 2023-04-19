@@ -231,6 +231,7 @@ class ActiveLearningModel(BaselineModel):
                                 epochs=self.epochs,
                                 callbacks=[model_checkpoint, early_stopping],
                                 validation_freq=1,
+                                class_weight=Utils.get_class_weights(train),
                                 verbose=1)
 
             for key in results.history.keys():
@@ -245,7 +246,8 @@ class ActiveLearningModel(BaselineModel):
             self.labeled_ds, self.unlabeled_ds = self.select_samples(self.labeled_ds, self.unlabeled_ds, self.num_samples)
             
             os.system('cls' if os.name == 'nt' else 'clear')
-
+    
+        train, val = Utils.remove_paths(self.labeled_ds), Utils.remove_paths(self.val_ds)
         # Train the final model using the best weights
         self.base_model.load_weights(self.checkpoint_dir + self.weights_file)
         results = self.base_model.fit(train,
@@ -253,6 +255,7 @@ class ActiveLearningModel(BaselineModel):
                             epochs=self.epochs,
                             callbacks=[model_checkpoint, early_stopping],
                             validation_freq=1,
+                            class_weight=Utils.get_class_weights(train),
                             verbose=1)
 
         for key in results.history.keys():

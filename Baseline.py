@@ -62,12 +62,6 @@ class BaselineModel:
                                                               monitor='val_loss', save_weights_only=True, save_best_only=True)
         
         train, val = Utils.remove_paths(self.train_ds), Utils.remove_paths(self.val_ds)
-        
-        labels = [int(label) for _, label in train.unbatch()]
-        total_labels = len(labels)
-        class_weights = {i: 1/(labels.count(i)/total_labels) for i in range(len(list(set(labels))))}
-        class_weight_sum = sum(class_weights.values())
-        class_weight = {k: v/class_weight_sum for k, v in class_weights.items()}
           
         self.base_model.compile(loss=loss_obj, optimizer=optimizer, metrics=['accuracy'])
         results = self.base_model.fit(train,
@@ -75,7 +69,7 @@ class BaselineModel:
                             epochs=self.epochs,
                             callbacks=[model_checkpoint, early_stopping],
                             validation_freq=1,
-                            class_weight=class_weight,
+                            class_weight=Utils.get_class_weights(train),
                             verbose=1)
         
         for key in results.history.keys():

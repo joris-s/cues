@@ -67,12 +67,15 @@ class FewShotModel(BaselineModel):
                                           validation_data=Utils.remove_paths(filtered_test_ds),
                                           epochs=1, verbose=1)
             print(f"---Task {i+1}/{self.tasks}---")
-
+            
+        train, val = Utils.remove_paths(self.train_ds), Utils.remove_paths(self.val_ds)
+            
         self.base_model.optimizer.lr = 0.001
-        results = self.base_model.fit(Utils.remove_paths(self.train_ds),
-                                      validation_data=Utils.remove_paths(self.val_ds),
+        results = self.base_model.fit(train,
+                                      validation_data=val,
                                       epochs=self.epochs,
                                       callbacks=[model_checkpoint, early_stopping],
+                                      class_weight=Utils.get_class_weights(train),
                                       verbose=1)
         
         for key in results.history.keys():
