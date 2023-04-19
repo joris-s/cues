@@ -46,6 +46,7 @@ MOVINET_PARAMS = {
 FPS = 30
 META_CLASSES = 101
 
+
 LABELED_FOLDER = 'data/slapi/labeled'
 UNLABELED_FOLDER = 'data/self/long_med'
 TRAIN_FOLDER = 'data/self/joris'
@@ -54,6 +55,15 @@ TEST_FOLDER = 'data/self/roos'
 META_TRAIN_FOLDER = 'data/UCF-101/train'
 META_VAL_FOLDER = 'data/UCF-101/val'
 AL_FOLDER = 'data/slapi/active-learning'
+if (os.name == 'nt') == False:
+    LABELED_FOLDER = 'data/slapi/labeled'
+    UNLABELED_FOLDER = 'data/slapi/unlabeled'
+    TRAIN_FOLDER = 'data/slapi/train'
+    VAL_FOLDER = 'data/slapi/val'
+    TEST_FOLDER = 'data/slapi/test'
+    META_TRAIN_FOLDER = 'data/UCF-101/train'
+    META_VAL_FOLDER = 'data/UCF-101/val'
+    AL_FOLDER = 'data/slapi/active-learning'
 
 LABEL_NAMES = sorted(os.listdir(TRAIN_FOLDER))
 
@@ -146,7 +156,7 @@ class FrameGenerator:
         for path, name in pairs:
             video_frames = frames_from_video_file(path, self.n_frames, output_size=(self.resolution, self.resolution), frame_step=self.frame_step)
             label = self.class_ids_for_name[name]  # Encode labels
-            yield video_frames, label, path.__str__()
+            yield video_frames, tf.cast(label, tf.int32), path.__str__()
 
 class ProposalGenerator:
     def __init__(self, model, path, n_frames, resolution, frame_step, extension='.mp4'):
@@ -187,7 +197,7 @@ class ProposalGenerator:
             result = np.vstack((result, next_result.copy()))
             result = result[::2]
             next_result = self.process_frames(src)
-            if isinstance(next_result, np.ndarray) == False:
+            if isinstance(next_result, bool):
                 return False, None, None
             label = next_label 
             next_label = self.get_label(next_result)
@@ -206,7 +216,7 @@ class ProposalGenerator:
             if isinstance(processed_frames, np.ndarray) == False:
                 break
             starting_frame = stop_index + 1
-            yield processed_frames, start_index, stop_index
+            yield processed_frames, tf.cast(start_index, tf.int32), tf.cast(stop_index, tf.int32)
 
 
 """*****************************************

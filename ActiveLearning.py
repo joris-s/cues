@@ -97,7 +97,7 @@ class ActiveLearningModel(BaselineModel):
                     print("Invalid input, please enter a label between 0 and", len(self.label_names)-1)
                     return False
                 
-                labels.append(label) 
+                labels.append(tf.cast(label, tf.int32))
                 return_samples.append(samples[i]) 
                 save_video(played_frames, label)     
                 
