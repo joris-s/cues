@@ -47,10 +47,10 @@ FPS = 30
 META_CLASSES = 101
 
 LABELED_FOLDER = 'data/slapi/labeled'
-UNLABELED_FOLDER = 'data/slapi/unlabeled'
-TRAIN_FOLDER = 'data/slapi/train'
-VAL_FOLDER = 'data/slapi/val'
-TEST_FOLDER = 'data/slapi/test'
+UNLABELED_FOLDER = 'data/self/long_med'
+TRAIN_FOLDER = 'data/self/joris'
+VAL_FOLDER = 'data/self/ercan'
+TEST_FOLDER = 'data/self/roos'
 META_TRAIN_FOLDER = 'data/UCF-101/train'
 META_VAL_FOLDER = 'data/UCF-101/val'
 AL_FOLDER = 'data/slapi/active-learning'
@@ -159,37 +159,42 @@ class ProposalGenerator:
 
     def process_frames(self, src):
         frames = []
-        for _ in range(self.n_frames - 1):
-            for _ in range(self.frame_step):
-                ret, frame = src.read()
-            if ret:
-                frame = format_frames(frame, self.output_size)
-                frames.append(frame)
-            else:
-                frames.append(np.zeros_like(frames[0]))
+        try:
+            for _ in range(self.n_frames - 1):
+                for _ in range(self.frame_step):
+                    ret, frame = src.read()
+                if ret:
+                    frame = format_frames(frame, self.output_size)
+                    frames.append(frame)
+                else:
+                    frames.append(np.zeros_like(frames[0]))
+        except Exception as e:
+            print(f'Error occured, stopping instance generation: {e}')
+            return False
         return np.array(frames)[..., [2, 1, 0]]
+    
+    def get_label(self, result):
+        return np.argmax(self.model.predict(result[np.newaxis, :])[0])
 
     def sliding_frames_from_video(self, starting_frame, src, max_combined=3):
         src.set(cv2.CAP_PROP_POS_FRAMES, starting_frame)
         result = self.process_frames(src)
         next_result = self.process_frames(src)
-        label, next_label = self.get_labels(result, next_result)
+        label, next_label = self.get_label(result), self.get_label(next_result)
         counter = 0
 
         while label == next_label and counter < max_combined:
-            result = result + next_result.copy()
+            result = np.vstack((result, next_result.copy()))
             result = result[::2]
             next_result = self.process_frames(src)
-            label, next_label = self.get_labels(result, next_result)
+            if isinstance(next_result, np.ndarray) == False:
+                return False, None, None
+            label = next_label 
+            next_label = self.get_label(next_result)
             counter += 1
 
         stop_index = src.get(cv2.CAP_PROP_POS_FRAMES)
         return result, int(starting_frame), int(stop_index)
-
-    def get_labels(self, result, next_result):
-        label = np.argmax(self.model.predict(result[np.newaxis, :])[0])
-        next_label = np.argmax(self.model.predict(next_result[np.newaxis, :])[0])
-        return label, next_label
 
     def __call__(self):
         cap = cv2.VideoCapture(self.path)
@@ -198,6 +203,8 @@ class ProposalGenerator:
 
         while starting_frame < (total_frames - self.n_frames):
             processed_frames, start_index, stop_index = self.sliding_frames_from_video(starting_frame, cap)
+            if isinstance(processed_frames, np.ndarray) == False:
+                break
             starting_frame = stop_index + 1
             yield processed_frames, start_index, stop_index
 
