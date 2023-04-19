@@ -43,7 +43,7 @@ class FewShotModel(BaselineModel):
         performance_history = {'loss': [], 'val_loss': [], 'accuracy': [], 'val_accuracy': []}
 
         loss_obj = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-        optimizer = tf.keras.optimizers.Adam(lr=1e-4)
+        optimizer = tf.keras.optimizers.Adam(learning_rate=1e-4)
 
         early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=5)
         model_checkpoint = tf.keras.callbacks.ModelCheckpoint(filepath=self.checkpoint_dir+self.weights_file, 

@@ -1,8 +1,11 @@
+import os
+import argparse
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
+
 from Baseline import BaselineModel
 from FewShotLearning import FewShotModel
 from ActiveLearning import ActiveLearningModel
 import Utils
-import argparse
 
 
 parser = argparse.ArgumentParser(description='Run machine learning models with different approaches')

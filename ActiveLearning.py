@@ -8,8 +8,6 @@ from typing import List, Tuple, Union
 
 import Utils
 from Baseline import BaselineModel
-from ProposalGenerator import ProposalGenerator
-
 
 
 class ActiveLearningModel(BaselineModel):
@@ -40,7 +38,7 @@ class ActiveLearningModel(BaselineModel):
         self.labeled_ds = self.train_ds
     
     def init_unlabeled_data(self, path, extension='.mp4'):
-            unlabeled_ds = tf.data.Dataset.from_generator(ProposalGenerator(self.base_model, path, 
+            unlabeled_ds = tf.data.Dataset.from_generator(Utils.ProposalGenerator(self.base_model, path, 
                                    self.num_frames, Utils.MOVINET_PARAMS[self.model_id][0], 
                                    self.frame_step), output_signature = Utils.GENERATOR_SIGNATURE)
             self.unlabeled_ds = unlabeled_ds.batch(self.batch_size)

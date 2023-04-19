@@ -47,10 +47,10 @@ FPS = 30
 META_CLASSES = 101
 
 LABELED_FOLDER = 'data/slapi/labeled'
-UNLABELED_FOLDER = 'data/self/long_med'
-TRAIN_FOLDER = 'data/self/joris'
-VAL_FOLDER = 'data/self/ercan'
-TEST_FOLDER = 'data/self/roos'
+UNLABELED_FOLDER = 'data/slapi/unlabeled'
+TRAIN_FOLDER = 'data/slapi/train'
+VAL_FOLDER = 'data/slapi/val'
+TEST_FOLDER = 'data/slapi/test'
 META_TRAIN_FOLDER = 'data/UCF-101/train'
 META_VAL_FOLDER = 'data/UCF-101/val'
 AL_FOLDER = 'data/slapi/active-learning'
@@ -148,6 +148,60 @@ class FrameGenerator:
             label = self.class_ids_for_name[name]  # Encode labels
             yield video_frames, label, path.__str__()
 
+class ProposalGenerator:
+    def __init__(self, model, path, n_frames, resolution, frame_step, extension='.mp4'):
+        self.model = model
+        self.path = path
+        self.n_frames = n_frames
+        self.output_size = (resolution, resolution)
+        self.extension = extension
+        self.frame_step = frame_step
+
+    def process_frames(self, src):
+        frames = []
+        for _ in range(self.n_frames - 1):
+            for _ in range(self.frame_step):
+                ret, frame = src.read()
+            if ret:
+                frame = format_frames(frame, self.output_size)
+                frames.append(frame)
+            else:
+                frames.append(np.zeros_like(frames[0]))
+        return np.array(frames)[..., [2, 1, 0]]
+
+    def sliding_frames_from_video(self, starting_frame, src, max_combined=3):
+        src.set(cv2.CAP_PROP_POS_FRAMES, starting_frame)
+        result = self.process_frames(src)
+        next_result = self.process_frames(src)
+        label, next_label = self.get_labels(result, next_result)
+        counter = 0
+
+        while label == next_label and counter < max_combined:
+            result = result + next_result.copy()
+            result = result[::2]
+            next_result = self.process_frames(src)
+            label, next_label = self.get_labels(result, next_result)
+            counter += 1
+
+        stop_index = src.get(cv2.CAP_PROP_POS_FRAMES)
+        return result, int(starting_frame), int(stop_index)
+
+    def get_labels(self, result, next_result):
+        label = np.argmax(self.model.predict(result[np.newaxis, :])[0])
+        next_label = np.argmax(self.model.predict(next_result[np.newaxis, :])[0])
+        return label, next_label
+
+    def __call__(self):
+        cap = cv2.VideoCapture(self.path)
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        starting_frame = 0
+
+        while starting_frame < (total_frames - self.n_frames):
+            processed_frames, start_index, stop_index = self.sliding_frames_from_video(starting_frame, cap)
+            starting_frame = stop_index + 1
+            yield processed_frames, start_index, stop_index
+
+
 """*****************************************
 *             Helper Functions             *
 *****************************************"""
@@ -203,27 +257,31 @@ def plot_train_val(history, title, savefigs=False):
 
     # Plot train and validation loss
     ax[0].plot(history['loss'], label='Train', marker='o')
-    ax[0].plot(history['val_loss'], label='Validation', marker='o')
+    ax[0].plot(history['val_loss'], label='Validation', marker='^')
     ax[0].set_title('Loss')
     ax[0].set_xlabel('Epoch')
     ax[0].set_ylabel('Loss')
     ax[0].set_ylim([0, 3])  # Adjust the y-axis limits
-    ax[0].set_xticks(np.arange(len(history['loss'])))
+    ax[0].xaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True))
+    ax[0].spines['top'].set_visible(False)
+    ax[0].spines['right'].set_visible(False)
 
     # Plot train and validation accuracy
     ax[1].plot(history['accuracy'], label='Train', marker='o')
-    ax[1].plot(history['val_accuracy'], label='Validation', marker='o')
+    ax[1].plot(history['val_accuracy'], label='Validation', marker='^')
     ax[1].set_title('Accuracy')
     ax[1].set_xlabel('Epoch')
     ax[1].set_ylabel('Accuracy')
     ax[1].set_ylim([0, 1])  # Adjust the y-axis limits
     ax[1].set_xticks(np.arange(len(history['accuracy'])))
+    ax[1].xaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True))
+    ax[1].spines['top'].set_visible(False)
+    ax[1].spines['right'].set_visible(False)
 
     # Add legend and title
     ax[0].legend(loc='best', fontsize='large')
     ax[1].legend(loc='best', fontsize='large')
     fig.suptitle(title, fontsize=16)
-
 
     fig.tight_layout()
     if savefigs:
