@@ -54,14 +54,17 @@ class FewShotModel(BaselineModel):
         def reset_labels(x, y, path):
             new_y = tf.reduce_min(tf.where(tf.equal(selected_class_indices, tf.cast(y, tf.int32))))
             return (x, new_y, path)
+        
+        def filter_func(x, y, path):
+            return tf.reduce_any(tf.equal(tf.cast(y, tf.int32), selected_class_indices))
 
         for i in range(self.tasks):
             tf.keras.backend.clear_session()
 
             selected_class_indices = tf.random.shuffle(tf.range(self.meta_classes))[:self.num_classes]
-
-            filtered_train_ds = self.meta_train_ds.unbatch().filter(lambda x, y, path: tf.reduce_any(tf.equal(tf.cast(y, tf.int32), selected_class_indices))).map(reset_labels).batch(self.batch_size)
-            filtered_test_ds = self.meta_val_ds.unbatch().filter(lambda x, y, path: tf.reduce_any(tf.equal(tf.cast(y, tf.int32), selected_class_indices))).map(reset_labels).batch(self.batch_size)
+            
+            filtered_train_ds = self.meta_train_ds.unbatch().filter(filter_func).map(reset_labels).batch(self.batch_size)
+            filtered_test_ds = self.meta_val_ds.unbatch().filter(filter_func).map(reset_labels).batch(self.batch_size)
 
             results = self.base_model.fit(Utils.remove_paths(filtered_train_ds),
                                           validation_data=Utils.remove_paths(filtered_test_ds),

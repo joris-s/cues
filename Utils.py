@@ -16,7 +16,7 @@ from sklearn.metrics import confusion_matrix
 
 # Set font parameters for Matplotlib
 plt.rc('font', family='serif')
-plt.rcParams.update({'font.size': 18})
+plt.rcParams.update({'font.size': 12})
 
 # Import the MoViNet model from TensorFlow Models (tf-models-official) for the MoViNet model
 from official.projects.movinet.modeling import movinet
@@ -381,7 +381,7 @@ def plot_train_val(history, title, savefigs=False):
     # Plot train and validation loss
     ax[0].plot(history['loss'], label='Train', marker='o')
     ax[0].plot(history['val_loss'], label='Validation', marker='^')
-    ax[0].set_title('Loss')
+    #ax[0].set_title('Loss')
     ax[0].set_xlabel('Epoch')
     ax[0].set_ylabel('Loss')
     ax[0].set_ylim([0, 3])  # Adjust the y-axis limits
@@ -392,7 +392,7 @@ def plot_train_val(history, title, savefigs=False):
     # Plot train and validation accuracy
     ax[1].plot(history['accuracy'], label='Train', marker='o')
     ax[1].plot(history['val_accuracy'], label='Validation', marker='^')
-    ax[1].set_title('Accuracy')
+    #ax[1].set_title('Accuracy')
     ax[1].set_xlabel('Epoch')
     ax[1].set_ylabel('Accuracy')
     ax[1].set_ylim([0, 1])  # Adjust the y-axis limits
@@ -413,7 +413,7 @@ def plot_train_val(history, title, savefigs=False):
     plt.clf()
     
 
-def plot_tsne(model, vids, labels, savefigs=True, name='tsne_plot'):
+def plot_tsne(model, vids, labels, savefigs=True, name=''):
     # Function to process videos in batches
     def batch_processing(vids, batch_size):
         num_batches = int(np.ceil(len(vids) / batch_size))
@@ -440,8 +440,7 @@ def plot_tsne(model, vids, labels, savefigs=True, name='tsne_plot'):
     colors = plt.cm.tab20b(np.linspace(0, 1, num_classes))
 
     # Define markers
-    markers = ['*', '+', ',', '.', '1', '2', '3', '4', '8', '<', '>', 'D', 'H', '^', '_', 'd', 'h', 'o', 'p', 's', 'v', 'x']
-    random.shuffle(markers)
+    markers = ['*','<','8','d','+','H','v','p','3','.','_','x','o','h','4','2','>','^','1',',','s','D']
     
     # Create a scatter plot colored by the labels
     plt.figure(figsize=(12, 8))
@@ -462,8 +461,23 @@ def plot_tsne(model, vids, labels, savefigs=True, name='tsne_plot'):
     if not os.path.exists('figs/'):
         os.makedirs('figs/')
     
-    plt.savefig(os.path.join('figs/', 'tsne.png'), dpi=600, bbox_inches='tight')
+    plt.savefig(os.path.join('figs/tsne/', f'{name}.png'), dpi=1000, bbox_inches='tight')
     plt.close()
+    
+def plot_all_tsne(model):
+    combined_datasets = model.train_ds.concatenate(model.val_ds).concatenate(model.test_ds)
+    datasets = {
+        'train': model.train_ds,
+        'val': model.val_ds,
+        'test': model.test_ds,
+        'all': combined_datasets
+    }
+
+    for version, dataset in datasets.items():
+        data = [(v, start, stop) for (v, start, stop) in dataset.unbatch()]
+        vids = np.array([v for v, _, _ in data])
+        labels = np.array([l for _, l, _ in data])
+        plot_tsne(model.base_model, vids, labels, name=f'tsne_{model.model_id.upper()}_{version}')
 
 """*****************************************
 *             MoViNet Helpers              *

@@ -114,7 +114,7 @@ class BaselineModel:
         self.stream_model.set_weights(self.base_model.get_weights())
     
     def init_data(self, extension, train_path = "", val_path = "", test_path = ""):
-        #Utils.create_data_splits(train_ratio=0.5, val_ratio=0.25, test_ratio=0.25)
+        Utils.create_data_splits(train_ratio=0.5, val_ratio=0.25, test_ratio=0.25)
         if train_path != "":
             train_ds = tf.data.Dataset.from_generator(Utils.FrameGenerator(Path(train_path), self.num_frames,
                                                                            resolution = self.resolution,
@@ -143,7 +143,7 @@ class BaselineModel:
             
         Utils.LABEL_NAMES = sorted(os.listdir(Utils.TRAIN_FOLDER))
         self.label_names = sorted(os.listdir(Utils.TRAIN_FOLDER))
-
+        self.num_classes = len(Utils.LABEL_NAMES)
             
     # Modified plot_train_val function
     def plot_train_val(self, savefig=True):

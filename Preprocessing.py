@@ -239,6 +239,44 @@ def create_snippets(excel_path, data_folder, output_folder):
                     
     aggregate_videos_by_class()
 
+def move_snippets_by_split():
+
+    def clear_folder(folder_path):
+        for item in os.listdir(folder_path):
+            item_path = os.path.join(folder_path, item)
+            if os.path.isfile(item_path):
+                os.remove(item_path)
+            elif os.path.isdir(item_path):
+                shutil.rmtree(item_path)
+    
+    split_file_path = 'data/slapi/SPLIT'
+    train_folder = Utils.TRAIN_FOLDER
+    val_folder = Utils.VAL_FOLDER
+    test_folder = Utils.TEST_FOLDER
+    
+    # Check if train, val, and test folders exist, and clear or create them accordingly
+    for folder in [train_folder, val_folder, test_folder]:
+        if os.path.exists(folder):
+            clear_folder(folder)
+        else:
+            os.makedirs(folder)
+    
+    if os.path.exists(split_file_path) and os.path.getsize(split_file_path) > 0:
+        with open(split_file_path, 'r') as split_file:
+            for line in split_file:
+                video_path, folder = line.strip().split()
+    
+                # Get the video filename from the path
+                video_filename = os.path.basename(video_path)
+    
+                # Create the destination folder if it doesn't exist
+                dest_folder = os.path.join(folder, video_filename)
+                Path(dest_folder).mkdir(parents=True, exist_ok=True)
+    
+                # Copy the video to the corresponding folder
+                shutil.copy(video_path, os.path.join(dest_folder, video_filename))
+    else:
+        print("SPLIT file does not exist or is empty.")
 
 if __name__ == '__main__':  
     #crop_rotate_video(path, out_path)

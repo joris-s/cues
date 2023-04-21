@@ -132,14 +132,13 @@ if __name__ == '__main__':
             model.plot_train_val()
         try:
             model.load_best_weights()
-        except:
+        except FileNotFoundError:
             print('Weights not found, training instead.')
             model.train()
             model.plot_train_val()
             model.load_best_weights()
         model.test()
         model.plot_confusion_matrix()
-        data = [(v, start, stop) for (v, start, stop) in model.test_ds.unbatch()]
-        vids = np.array([v for v, _, _ in data])
-        labels = np.array([l for _, l, _ in data])
-        Utils.plot_tsne(model.base_model, vids, labels)
+
+        if (model.model_id == 'a2') and (model.name =='Baseline'):
+            Utils.plot_all_tsne(model)
