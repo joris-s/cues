@@ -2,6 +2,7 @@ import tensorflow as tf
 import Utils
 from pathlib import Path
 from sklearn.metrics import balanced_accuracy_score
+import os
 
 
 class BaselineModel:
@@ -113,7 +114,7 @@ class BaselineModel:
         self.stream_model.set_weights(self.base_model.get_weights())
     
     def init_data(self, extension, train_path = "", val_path = "", test_path = ""):
-        
+        #Utils.create_data_splits(train_ratio=0.5, val_ratio=0.25, test_ratio=0.25)
         if train_path != "":
             train_ds = tf.data.Dataset.from_generator(Utils.FrameGenerator(Path(train_path), self.num_frames,
                                                                            resolution = self.resolution,
@@ -139,6 +140,10 @@ class BaselineModel:
                                                                            extension=extension),
                                                              output_signature = self.output_signature)
             self.test_ds = test_ds.batch(self.batch_size)
+            
+        Utils.LABEL_NAMES = sorted(os.listdir(Utils.TRAIN_FOLDER))
+        self.label_names = sorted(os.listdir(Utils.TRAIN_FOLDER))
+
             
     # Modified plot_train_val function
     def plot_train_val(self, savefig=True):

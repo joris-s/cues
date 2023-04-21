@@ -28,10 +28,15 @@ class ActiveLearningModel(BaselineModel):
         self.unlabeled_path = ""
         os.makedirs(Utils.AL_FOLDER, exist_ok=True)
         
+        # Read the INCLUDE file and create a set of video codes to be included
+        with open('data/slapi/INCLUDE', 'r') as f:
+            included_video_codes = set(line.strip() for line in f.readlines())
+        
         for root, dirs, files in os.walk(data_path):
             for file in files:
                 if file.endswith(".mp4"):
                     self.unlabeled_paths.append(os.path.join(root, file))
+        self.unlabeled_paths = [path for path in self.unlabeled_paths if not any(video_code in path for video_code in included_video_codes)]
     
     def init_data(self, *args, **kwargs):
         super().init_data(*args, **kwargs)
@@ -190,9 +195,23 @@ class ActiveLearningModel(BaselineModel):
             threshold = 1 - (iteration / max_iterations)
             selected_indices = tf.where(entropies < threshold)
             return tf.squeeze(selected_indices)[:num_samples]
+        
+        #selects indices per class max activation and corrected per class        
+        def select_weighted_top_samples(vids, classes, samples_per_class):
+            unlabeled_probs = tf.nn.softmax(self.base_model(vids))
+            
+            top_indices = {}
+            for class_idx in range(len(classes)):
+                class_probs = unlabeled_probs[:, class_idx]
+                topk_indices = tf.math.top_k(class_probs, k=samples_per_class[class_idx]).indices
+                top_indices[class_idx] = topk_indices.numpy()
+            
+            selected_indices = np.unique(np.concatenate(list(top_indices.values())))
+            return selected_indices
+
 
     
-        selected_indices = least_confident_sampling(vids, num_samples)
+        selected_indices = select_weighted_top_samples(vids, Utils.LABEL_NAMES, Utils.get_class_weights(self.unlabeled_ds))
         processed_frames, start_indices, stop_indices = zip(*data)
         processed_frames, start_indices, stop_indices = np.array(processed_frames), np.array(start_indices), np.array(stop_indices)
     
@@ -239,8 +258,12 @@ class ActiveLearningModel(BaselineModel):
 
             print(f'Starting Active Learning loop {i+1}/{self.num_loops}')
             tf.keras.backend.clear_session()
-            self.unlabeled_path = self.unlabeled_paths.pop()
-            self.init_unlabeled_data(self.unlabeled_path)
+            
+            #Maybe not do this every time, but just recompute uncertainty over self.unlabeled_ds since it is still available
+            #maybe only do this as fucntion of num_loops/len(self.available paths)
+            #self.unlabeled_path = self.unlabeled_paths.pop()
+            #self.init_unlabeled_data(self.unlabeled_path)
+            
             self.labeled_ds, self.unlabeled_ds = self.select_samples(self.labeled_ds, self.unlabeled_ds, self.num_samples)
             
             os.system('cls' if os.name == 'nt' else 'clear')

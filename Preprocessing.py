@@ -176,6 +176,26 @@ def crop_rotate_video(input_path, output_path):
     # Release the input and output video objects
     cap.release()
     out.release()
+from pathlib import Path
+import shutil
+
+def aggregate_videos_by_class():
+    video_codes = os.listdir(Utils.LABELED_FOLDER)
+
+    for video_code in video_codes:
+        video_code_path = os.path.join(Utils.LABELED_FOLDER, video_code)
+        all_path = os.path.join(video_code_path, 'ALL')
+        Path(Utils.LABELED_FOLDER+"/ALL").mkdir(parents=True, exist_ok=True)
+
+        for class_name in os.listdir(video_code_path):
+            if class_name == 'ALL':  # Skip the 'ALL' folder
+                continue
+
+            class_path = os.path.join(video_code_path, class_name)
+            for video_file in os.listdir(class_path):
+                src = os.path.join(class_path, video_file)
+                dest = os.path.join(all_path, f"{class_name}/{video_file}")
+                shutil.copy(src, dest)
 
 def create_snippets(excel_path, data_folder, output_folder):
     # Read Excel file into a dictionary of dataframes, one for each sheet
@@ -199,7 +219,7 @@ def create_snippets(excel_path, data_folder, output_folder):
             behaviour = row['Behaviour']
 
             # Create the output folder if it does not exist
-            folder_path = os.path.join(output_folder, behaviour)
+            folder_path = os.path.join(output_folder, video_name, behaviour)
             os.makedirs(folder_path, exist_ok=True)
 
 
@@ -214,13 +234,12 @@ def create_snippets(excel_path, data_folder, output_folder):
             for video_path in video_paths:
                 with VideoFileClip(video_path) as video:
                     snippet = video.subclip(start, end)
-                    output_path = f'{output_folder}/{behaviour}/{behaviour}_{datetime.datetime.now().strftime("%H_%M_%S")}.mp4'
+                    output_path = f'{output_folder}/{video_name}/{behaviour}/{behaviour}_{datetime.datetime.now().strftime("%H_%M_%S")}.mp4'
                     snippet.write_videofile(output_path)
+                    
+    aggregate_videos_by_class()
 
-    
-    
 
-    
 if __name__ == '__main__':  
     #crop_rotate_video(path, out_path)
-    create_snippets('cues_annotation_jstab.xlsx', Utils.UNLABELED_FOLDER, Utils.LABELED_FOLDER)
+    create_snippets('annotation_cues_jstab.xlsx', Utils.UNLABELED_FOLDER, Utils.LABELED_FOLDER)

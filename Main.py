@@ -1,5 +1,6 @@
 import os
 import argparse
+import numpy as np
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
 
 from Baseline import BaselineModel
@@ -67,8 +68,6 @@ print("----------")
 
 if __name__ == '__main__':
     
-    args = parser.parse_args()
-
     b_models=[]
     a_models=[]
     f_models=[]
@@ -140,3 +139,7 @@ if __name__ == '__main__':
             model.load_best_weights()
         model.test()
         model.plot_confusion_matrix()
+        data = [(v, start, stop) for (v, start, stop) in model.test_ds.unbatch()]
+        vids = np.array([v for v, _, _ in data])
+        labels = np.array([l for _, l, _ in data])
+        Utils.plot_tsne(model.base_model, vids, labels)

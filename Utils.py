@@ -1,23 +1,30 @@
-import random
-import cv2
-import numpy as np
-import tensorflow as tf
-import seaborn as sns
 import os
-from sklearn.metrics import confusion_matrix
+import random
+import shutil
 from pathlib import Path
-import matplotlib.pyplot as plt
+
+import cv2
 import matplotlib
-if os.name != 'nt':
-    matplotlib.use('tkagg')
+import matplotlib.patches as patches
+import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
+import numpy as np
+import seaborn as sns
+import tensorflow as tf
+from sklearn.manifold import TSNE
+from sklearn.metrics import confusion_matrix
 
 # Set font parameters for Matplotlib
 plt.rc('font', family='serif')
-plt.rcParams.update({'font.size': 12})
+plt.rcParams.update({'font.size': 18})
 
 # Import the MoViNet model from TensorFlow Models (tf-models-official) for the MoViNet model
 from official.projects.movinet.modeling import movinet
 from official.projects.movinet.modeling import movinet_model
+
+if os.name != 'nt':
+    matplotlib.use('tkagg')
+
 
 """*****************************************
 *            Define Constants              *
@@ -113,6 +120,7 @@ def frames_from_video_file(video_path, n_frames, output_size, frame_step=15):
 def filter_examples_per_class(examples_list, max_examples_per_class):
     num_examples_per_class = {}
     filtered_list = []
+    random.shuffle(examples_list)
     for example in examples_list:
         if num_examples_per_class.setdefault(example[1], 0) < max_examples_per_class:
             num_examples_per_class[example[1]] += 1
@@ -130,7 +138,6 @@ class FrameGenerator:
         self.frame_step = frame_step
         self.class_names = sorted(set(p.name for p in self.path.iterdir() if p.is_dir()))
         self.class_ids_for_name = dict((name, idx) for idx, name in enumerate(self.class_names))
-        self.old_pairs = -1
 
     def get_files_and_class_names(self):
         video_paths = list(self.path.glob('*/*' + self.extension))
@@ -141,11 +148,6 @@ class FrameGenerator:
         video_paths, classes = self.get_files_and_class_names()
 
         pairs = list(zip(video_paths, classes))
-        if self.old_pairs == -1:
-            self.old_pairs = pairs
-
-        assert pairs == self.old_pairs
-        self.old_pairs = pairs.copy()
 
         if self.shots != -1:
             pairs = filter_examples_per_class(pairs, self.shots)
@@ -242,6 +244,85 @@ def remove_indices(ds):
         return frames
     return ds.map(select_frames)
 
+def get_class_weights(ds):
+    labels = [int(label) for _, label in ds.unbatch()]
+    total_labels = len(labels)
+    class_weights = {i: 1/(labels.count(i)/total_labels) for i in range(len(list(set(labels))))}
+    class_weight_sum = sum(class_weights.values())
+    class_weight = {k: v/class_weight_sum for k, v in class_weights.items()}
+    return class_weight
+
+
+
+def create_data_splits(train_ratio=0.7, val_ratio=0.2, test_ratio=0.1, split_file='data/slapi/SPLIT', include_file='data/slapi/INCLUDE'):
+    # Read the INCLUDE file and create a set of video codes to be included
+    with open(include_file, 'r') as f:
+        included_video_codes = set(line.strip() for line in f.readlines())
+        
+    # Check if TRAIN_FOLDER, VAL_FOLDER, and TEST_FOLDER exist, create them if not
+    for folder in [TRAIN_FOLDER, VAL_FOLDER, TEST_FOLDER]:
+        if not os.path.exists(folder):
+            os.makedirs(folder)
+
+
+    # Filter the video_codes based on the included_video_codes set
+    video_codes = [vc for vc in os.listdir(LABELED_FOLDER) if vc in included_video_codes]
+    
+    # Organize videos by class
+    class_videos = {}
+    for video_code in video_codes:
+        video_code_path = os.path.join(LABELED_FOLDER, video_code)
+        for class_name in os.listdir(video_code_path):
+            if class_name == 'ALL':  # Skip the 'ALL' folder
+                continue
+            
+            class_path = os.path.join(video_code_path, class_name)
+            if class_name not in class_videos:
+                class_videos[class_name] = []
+            for video_file in os.listdir(class_path):
+                class_videos[class_name].append(os.path.join(class_path, video_file))
+
+    # Remove classes with fewer than 3 samples
+    class_videos = {k: v for k, v in class_videos.items() if len(v) >= 3}
+
+    # Check if train, val, and test folders are empty
+    if any([len(os.listdir(TRAIN_FOLDER)), len(os.listdir(VAL_FOLDER)), len(os.listdir(TEST_FOLDER))]):
+        print("The train, val, or test folder is not empty. Aborting.")
+        return
+    
+    # Clear the SPLIT file if it already exists
+    with open(os.path.join(split_file), 'w') as f:
+        pass
+
+    # Create train, validation, and test splits
+    split_data = {'train': TRAIN_FOLDER, 'val': VAL_FOLDER, 'test': TEST_FOLDER}
+    with open(os.path.join(split_file), 'w') as f:
+        for class_name, videos in class_videos.items():
+            random.shuffle(videos)
+            n = len(videos)
+            train_count, val_count = max(1, int(n * train_ratio)), max(1, int(n * val_ratio))
+            
+            for idx, video_path in enumerate(videos):
+                if idx < train_count:
+                    split = 'train'
+                elif idx < train_count + val_count:
+                    split = 'val'
+                else:
+                    split = 'test'
+                
+                # Write the split information to the text file
+                f.write(f"{video_path} {split}\n")
+
+                # Copy the video to the corresponding split folder
+                dest_folder = os.path.join(split_data[split], class_name)
+                Path(dest_folder).mkdir(parents=True, exist_ok=True)
+                shutil.copy(video_path, os.path.join(dest_folder, os.path.basename(video_path)))
+
+
+
+"""*****************************************
+*             Plotting Functions           *
+*****************************************"""
 def cm_heatmap(actual, predicted, labels, savefigs=False, name='heatmap'):
     plt.clf()
     cm_num = confusion_matrix(actual, predicted)
@@ -250,22 +331,47 @@ def cm_heatmap(actual, predicted, labels, savefigs=False, name='heatmap'):
         row = cm_num[i]
         cm.append([(round(x/sum(row), 2)) for x in row])
     
-    ax = sns.heatmap(cm, annot=True, cmap='BuPu', vmin=0.00, vmax=1.00)
-    sns.set(rc={'figure.figsize':(15, 15)})
-    sns.set(font_scale=1.9)
-    ax.xaxis.tick_bottom()
-    ax.set_xlabel('Predicted Action')
-    ax.set_ylabel('Actual Action')
-    plt.xticks(rotation=90)
-    plt.yticks(rotation=0)
-    ax.xaxis.set_ticklabels(labels)
-    ax.yaxis.set_ticklabels(labels)
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(30, 15))
+    
+    # Plot the normalized confusion matrix
+    sns.heatmap(cm, annot=True, cmap='BuPu', vmin=0.00, vmax=1.00, ax=ax1)
+    ax1.set_title('Normalized Confusion Matrix')
+    ax1.set_xlabel('Predicted Action')
+    ax1.set_ylabel('Actual Action')
+    ax1.xaxis.tick_bottom()
+    plt.setp(ax1.get_xticklabels(), rotation=90)
+    plt.setp(ax1.get_yticklabels(), rotation=0)
+    ax1.xaxis.set_ticklabels(labels)
+    ax1.yaxis.set_ticklabels(labels)
+    
+    # Add black borders around the diagonal
+    for i in range(len(labels)):
+        rect = patches.Rectangle((i, i), 1, 1, linewidth=2, edgecolor='black', facecolor='none')
+        ax1.add_patch(rect)
+
+    # Plot the original confusion matrix with integer values
+    sns.heatmap(cm_num, annot=True, cbar=False, cmap=ListedColormap(['white']), fmt='d', ax=ax2)
+    ax2.set_title('Confusion Matrix with Integer Values')
+    ax2.set_xlabel('Predicted Action')
+    ax2.set_ylabel('Actual Action')
+    ax2.xaxis.tick_bottom()
+    plt.setp(ax2.get_xticklabels(), rotation=90)
+    plt.setp(ax2.get_yticklabels(), rotation=0)
+    ax2.xaxis.set_ticklabels(labels)
+    ax2.yaxis.set_ticklabels(labels)
+
+    # Add black borders around the diagonal
+    for i in range(len(labels)):
+        rect = patches.Rectangle((i, i), 1, 1, linewidth=2, edgecolor='black', facecolor='none')
+        ax2.add_patch(rect)
+        
+    plt.tight_layout()
     
     if savefigs:
         plt.savefig('figs/cm/'+name+'.png', bbox_inches='tight', dpi=600)
     plt.close()    
     plt.clf()
-    
+
 # Modified plot_train_val function
 def plot_train_val(history, title, savefigs=False):
     # Create figure and axis objects
@@ -306,14 +412,59 @@ def plot_train_val(history, title, savefigs=False):
     plt.close() 
     plt.clf()
     
-def get_class_weights(ds):
-    labels = [int(label) for _, label in ds.unbatch()]
-    total_labels = len(labels)
-    class_weights = {i: 1/(labels.count(i)/total_labels) for i in range(len(list(set(labels))))}
-    class_weight_sum = sum(class_weights.values())
-    class_weight = {k: v/class_weight_sum for k, v in class_weights.items()}
-    return class_weight
+
+def plot_tsne(model, vids, labels, savefigs=True, name='tsne_plot'):
+    # Function to process videos in batches
+    def batch_processing(vids, batch_size):
+        num_batches = int(np.ceil(len(vids) / batch_size))
+        for i in range(num_batches):
+            start = i * batch_size
+            end = min((i+1) * batch_size, len(vids))
+            yield vids[start:end]
+
+    # Get the penultimate layer of the model in batches
+    batch_size = 8
+    penultimate_features = []
+    for batch_vids in batch_processing(vids, batch_size):
+        features = model.backbone(batch_vids)
+        batch_features = [f.numpy().flatten() for f in features[0]['head']]
+        penultimate_features.extend(batch_features)
+    penultimate_features = np.array(penultimate_features)
+
+    # Create a t-SNE representation
+    tsne = TSNE(n_components=2, random_state=42)
+    tsne_representation = tsne.fit_transform(penultimate_features)
+
+    # Define colors
+    num_classes = len(np.unique(labels))
+    colors = plt.cm.tab20b(np.linspace(0, 1, num_classes))
+
+    # Define markers
+    markers = ['*', '+', ',', '.', '1', '2', '3', '4', '8', '<', '>', 'D', 'H', '^', '_', 'd', 'h', 'o', 'p', 's', 'v', 'x']
+    random.shuffle(markers)
     
+    # Create a scatter plot colored by the labels
+    plt.figure(figsize=(12, 8))
+    unique_labels = np.unique(labels)
+    for label, color, marker in zip(unique_labels, colors, markers[:num_classes]):
+        indices = np.where(labels == label)
+        plt.scatter(tsne_representation[indices, 0], tsne_representation[indices, 1], label=LABEL_NAMES[label], c=[color], marker=marker, alpha=1, s=150)
+
+    plt.gca().set_xticks([])
+    plt.gca().set_yticks([])
+    plt.gca().spines['top'].set_visible(False)
+    plt.gca().spines['right'].set_visible(False)
+    plt.gca().spines['bottom'].set_visible(False)
+    plt.gca().spines['left'].set_visible(False)
+    plt.legend(title="Classes", loc='center left', bbox_to_anchor=(1, 0.5))
+
+    # Save the plot to the "figs/" folder
+    if not os.path.exists('figs/'):
+        os.makedirs('figs/')
+    
+    plt.savefig(os.path.join('figs/', 'tsne.png'), dpi=600, bbox_inches='tight')
+    plt.close()
+
 """*****************************************
 *             MoViNet Helpers              *
 *****************************************"""
