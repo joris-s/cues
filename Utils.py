@@ -149,7 +149,7 @@ class FrameGenerator:
 
         pairs = list(zip(video_paths, classes))
 
-        if self.shots != -1:
+        if self.shots > -1:
             pairs = filter_examples_per_class(pairs, self.shots)
 
         if self.training:
@@ -331,10 +331,10 @@ def cm_heatmap(actual, predicted, labels, savefigs=False, name='heatmap'):
         row = cm_num[i]
         cm.append([(round(x/sum(row), 2)) for x in row])
     
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(30, 15))
+    fig, (ax2, ax1) = plt.subplots(1, 2, figsize=(30, 15))
     
     # Plot the normalized confusion matrix
-    sns.heatmap(cm, annot=True, cmap='BuPu', vmin=0.00, vmax=1.00, ax=ax1)
+    heatmap1 = sns.heatmap(cm, annot=True, cbar=False, cmap='BuPu', vmin=0.00, vmax=1.00, ax=ax1, square=True)
     ax1.set_title('Normalized Confusion Matrix')
     ax1.set_xlabel('Predicted Action')
     ax1.set_ylabel('Actual Action')
@@ -350,7 +350,8 @@ def cm_heatmap(actual, predicted, labels, savefigs=False, name='heatmap'):
         ax1.add_patch(rect)
 
     # Plot the original confusion matrix with integer values
-    sns.heatmap(cm_num, annot=True, cbar=False, cmap=ListedColormap(['white']), fmt='d', ax=ax2)
+    #heatmap2 = sns.heatmap(cm_num, annot=True, cbar=False, cmap=ListedColormap(['white']), fmt='d', ax=ax2)
+    heatmap2 = sns.heatmap(cm, annot=True, cbar=False, cmap='BuPu', vmin=0.00, vmax=1.00, ax=ax2, square=True)
     ax2.set_title('Confusion Matrix with Integer Values')
     ax2.set_xlabel('Predicted Action')
     ax2.set_ylabel('Actual Action')
@@ -359,6 +360,18 @@ def cm_heatmap(actual, predicted, labels, savefigs=False, name='heatmap'):
     plt.setp(ax2.get_yticklabels(), rotation=0)
     ax2.xaxis.set_ticklabels(labels)
     ax2.yaxis.set_ticklabels(labels)
+    
+    # Customize annotations to make non-zero values bold
+    counter = 0
+    for text1, text2 in zip(heatmap1.texts, heatmap2.texts):
+        text2.set_text(str(np.array(cm_num).flatten()[counter]))
+        counter+=1
+        if text1.get_text() != "0":
+            text1.set_weight("bold")
+            text2.set_weight("bold")
+        if text1.get_text() == "0":
+            text1.set_text("-")
+            text2.set_text("-")
 
     # Add black borders around the diagonal
     for i in range(len(labels)):
@@ -368,9 +381,11 @@ def cm_heatmap(actual, predicted, labels, savefigs=False, name='heatmap'):
     plt.tight_layout()
     
     if savefigs:
-        plt.savefig('figs/cm/'+name+'.png', bbox_inches='tight', dpi=600)
+        plt.savefig('figs/cm/'+name+'.png', bbox_inches='tight', dpi=1000)
     plt.close()    
     plt.clf()
+
+
 
 # Modified plot_train_val function
 def plot_train_val(history, title, savefigs=False):
@@ -412,72 +427,90 @@ def plot_train_val(history, title, savefigs=False):
     plt.close() 
     plt.clf()
     
+def batch_processing(vids, batch_size):
+      num_batches = int(np.ceil(len(vids) / batch_size))
+      for i in range(num_batches):
+          start = i * batch_size
+          end = min((i+1) * batch_size, len(vids))
+          yield vids[start:end]
 
-def plot_tsne(model, vids, labels, savefigs=True, name=''):
-    # Function to process videos in batches
-    def batch_processing(vids, batch_size):
-        num_batches = int(np.ceil(len(vids) / batch_size))
-        for i in range(num_batches):
-            start = i * batch_size
-            end = min((i+1) * batch_size, len(vids))
-            yield vids[start:end]
+def count_elements_in_dataset(dataset):
+    count = 0
+    for _ in dataset.unbatch():
+        count += 1
+    return count
+
+def plot_tsne(tsne_representation, labels, indices, savefigs=True, name='', x_lim=None, y_lim=None):
+    num_classes = len(np.unique(labels))
+    colors = plt.cm.tab20b(np.linspace(0, 1, num_classes))
+    markers = ['>','s','+','2','d','h', 'o','4',',','v','H','1','*','3','^','<','.','_','x','8','p','D']
+    print("made colors")
+    plt.figure(figsize=(12, 8))
+    unique_labels = np.unique(labels)
+    for label, color, marker in zip(unique_labels, colors, markers[:num_classes]):
+        label_indices = np.where(labels == label)
+        plot_indices = np.intersect1d(label_indices, indices)
+        plt.scatter(tsne_representation[plot_indices, 0], tsne_representation[plot_indices, 1], label=LABEL_NAMES[label], c=[color], marker=marker, alpha=1, s=150)
+    print("Did plot")
+
+
+    plt.gca().spines['top'].set_visible(False)
+    plt.gca().spines['right'].set_visible(False)
+    plt.xlabel("t-SNE Axis 0")
+    plt.ylabel("t-SNE Axis 1")
+    plt.legend(title="Classes", loc='center left', bbox_to_anchor=(1, 0.5))
+    if not x_lim:
+        x_lim = (min(tsne_representation[:, 0]) - 5, max(tsne_representation[:, 0]) + 5)
+        y_lim = (min(tsne_representation[:, 1]) - 5, max(tsne_representation[:, 1]) + 5)
+    plt.xlim(x_lim)
+    plt.ylim(y_lim)
+    print('saving')
+    if not os.path.exists('figs/'):
+        os.makedirs('figs/')
+
+    plt.savefig(os.path.join('figs/tsne/', f'{name}.png'), dpi=1000, bbox_inches='tight')
+    plt.close()
+    
+    return x_lim, y_lim
+
+def plot_all_tsne(model):
+    combined_datasets = model.train_ds.concatenate(model.val_ds).concatenate(model.test_ds)
+
+    data = [(v, start, stop) for (v, start, stop) in combined_datasets.unbatch()]
+    vids = np.array([v for v, _, _ in data])
+    labels = np.array([l for _, l, _ in data])
+    print("Data prepared")
 
     # Get the penultimate layer of the model in batches
     batch_size = 8
     penultimate_features = []
-    for batch_vids in batch_processing(vids, batch_size):
-        features = model.backbone(batch_vids)
+    for i, batch_vids in enumerate(batch_processing(vids, batch_size)):
+        print(f"Processing batch {i + 1}")
+        features = model.base_model.backbone(batch_vids)
         batch_features = [f.numpy().flatten() for f in features[0]['head']]
         penultimate_features.extend(batch_features)
     penultimate_features = np.array(penultimate_features)
+    print("Penultimate features obtained")
 
-    # Create a t-SNE representation
+    # Compute t-SNE representation for all the data at once
     tsne = TSNE(n_components=2, random_state=42)
     tsne_representation = tsne.fit_transform(penultimate_features)
+    print("t-SNE representation computed")
 
-    # Define colors
-    num_classes = len(np.unique(labels))
-    colors = plt.cm.tab20b(np.linspace(0, 1, num_classes))
+    # Compute lengths of the train, val, and test datasets
+    train_len = count_elements_in_dataset(model.train_ds)
+    val_len = count_elements_in_dataset(model.val_ds)
+    test_len = count_elements_in_dataset(model.test_ds)
+    print(f"Lengths - Train: {train_len}, Val: {val_len}, Test: {test_len}")
 
-    # Define markers
-    markers = ['*','<','8','d','+','H','v','p','3','.','_','x','o','h','4','2','>','^','1',',','s','D']
-    
-    # Create a scatter plot colored by the labels
-    plt.figure(figsize=(12, 8))
-    unique_labels = np.unique(labels)
-    for label, color, marker in zip(unique_labels, colors, markers[:num_classes]):
-        indices = np.where(labels == label)
-        plt.scatter(tsne_representation[indices, 0], tsne_representation[indices, 1], label=LABEL_NAMES[label], c=[color], marker=marker, alpha=1, s=150)
+    # Plot t-SNE for train, val, test, and combined datasets
+    x_lim, y_lim = plot_tsne(tsne_representation, labels, np.arange(len(labels)), name=f'tsne_{model.model_id.upper()}_combined')
+    plot_tsne(tsne_representation[:train_len], labels[:train_len], np.arange(train_len), name=f'tsne_{model.model_id.upper()}_train', x_lim=x_lim, y_lim=y_lim)
+    plot_tsne(tsne_representation[train_len:train_len+val_len], labels[train_len:train_len+val_len], np.arange(val_len), name=f'tsne_{model.model_id.upper()}_val', x_lim=x_lim, y_lim=y_lim)
+    plot_tsne(tsne_representation[train_len+val_len:], labels[train_len+val_len:], np.arange(test_len), name=f'tsne_{model.model_id.upper()}_test', x_lim=x_lim, y_lim=y_lim)
 
-    plt.gca().set_xticks([])
-    plt.gca().set_yticks([])
-    plt.gca().spines['top'].set_visible(False)
-    plt.gca().spines['right'].set_visible(False)
-    plt.gca().spines['bottom'].set_visible(False)
-    plt.gca().spines['left'].set_visible(False)
-    plt.legend(title="Classes", loc='center left', bbox_to_anchor=(1, 0.5))
+    print("Finished plotting")
 
-    # Save the plot to the "figs/" folder
-    if not os.path.exists('figs/'):
-        os.makedirs('figs/')
-    
-    plt.savefig(os.path.join('figs/tsne/', f'{name}.png'), dpi=1000, bbox_inches='tight')
-    plt.close()
-    
-def plot_all_tsne(model):
-    combined_datasets = model.train_ds.concatenate(model.val_ds).concatenate(model.test_ds)
-    datasets = {
-        'train': model.train_ds,
-        'val': model.val_ds,
-        'test': model.test_ds,
-        'all': combined_datasets
-    }
-
-    for version, dataset in datasets.items():
-        data = [(v, start, stop) for (v, start, stop) in dataset.unbatch()]
-        vids = np.array([v for v, _, _ in data])
-        labels = np.array([l for _, l, _ in data])
-        plot_tsne(model.base_model, vids, labels, name=f'tsne_{model.model_id.upper()}_{version}')
 
 """*****************************************
 *             MoViNet Helpers              *
