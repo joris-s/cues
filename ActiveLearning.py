@@ -1,4 +1,5 @@
 import os
+import json
 import datetime
 import numpy as np
 import cv2
@@ -87,7 +88,7 @@ class ActiveLearningModel(BaselineModel):
             def save_video(played_frames: List[np.ndarray], label: Union[int, str]) -> None:
                 now = datetime.datetime.now()
                 time_str = now.strftime("%H:%M:%S").replace(":", "_")
-                name = f"{time_str}-{self.unlabeled_path[-7:-4]}"
+                name = f"{time_str}-{self.unlabeled_path[-15:-4]}"
                 vid_dir = f'{Utils.AL_FOLDER}/{label if isinstance(label, str) else Utils.LABEL_NAMES[label]}'
                 name = f'{label if isinstance(label, str) else Utils.LABEL_NAMES[label]}-{name}'
                 
@@ -229,6 +230,12 @@ class ActiveLearningModel(BaselineModel):
         return labeled_ds, unlabeled_ds
     
     def train(self):
+        ph = {m.name: [] for m in Utils.METRICS}
+        performance_history = {'loss': [], 'val_loss': []}
+        
+        for metric_name in ph.keys():
+            performance_history[f'train_{metric_name}'] = []
+            performance_history[f'val_{metric_name}'] = []  
         
         early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=3)
         model_checkpoint = tf.keras.callbacks.ModelCheckpoint(filepath=self.checkpoint_dir + self.weights_file,
@@ -237,8 +244,6 @@ class ActiveLearningModel(BaselineModel):
         loss_obj = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
         optimizer = tf.keras.optimizers.Adam()
         self.base_model.compile(loss=loss_obj, optimizer=optimizer, metrics=['accuracy'])
-
-        performance_history = {'loss': [], 'val_loss': [], 'accuracy': [], 'val_accuracy': []}
 
         for i in range(self.num_loops):
             train, val = Utils.remove_paths(self.labeled_ds), Utils.remove_paths(self.val_ds)
@@ -251,8 +256,13 @@ class ActiveLearningModel(BaselineModel):
                                 class_weight=Utils.get_class_weights(train),
                                 verbose=1)
 
-            for key in results.history.keys():
-                performance_history[key].extend(results.history[key])
+            for k in results.history.keys():
+                if k.startswith('val_'):
+                    performance_history[k].extend(results.history[k])
+                elif k == 'loss':
+                    performance_history[k].extend(results.history[k])
+                else:
+                    performance_history[f'train_{k}'].extend(results.history[k])
                 
             os.system('cls' if os.name == 'nt' else 'clear')
 
@@ -278,9 +288,17 @@ class ActiveLearningModel(BaselineModel):
                             validation_freq=1,
                             class_weight=Utils.get_class_weights(train),
                             verbose=1)
-
-        for key in results.history.keys():
-            performance_history[key].extend(results.history[key])
         
+        for k in results.history.keys():
+            if k.startswith('val_'):
+                performance_history[k].extend(results.history[k])
+            elif k == 'loss':
+                performance_history[k].extend(results.history[k])
+            else:
+                performance_history[f'train_{k}'].extend(results.history[k])
         self.history = performance_history
+        
+        os.makedirs('metrics', exist_ok=True)
+        with open(f'metrics/metrics_{self.name}_{self.model_id}.txt', 'w') as f:
+            json.dump(performance_history, f, indent=4)
 

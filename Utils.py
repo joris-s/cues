@@ -2,6 +2,7 @@ import os
 import random
 import shutil
 from pathlib import Path
+import json
 
 import cv2
 import matplotlib
@@ -73,6 +74,55 @@ if (os.name == 'nt') == False:
     AL_FOLDER = 'data/slapi/active-learning'
 
 LABEL_NAMES = sorted(os.listdir(TRAIN_FOLDER))
+
+"""*****************************************
+*                Metrics                   *
+*****************************************"""
+
+class SparseF1Score(tf.keras.metrics.Metric):
+    def __init__(self, name='sparse_f1_score', **kwargs):
+        super(SparseF1Score, self).__init__(name=name, **kwargs)
+        self.precision = SparsePrecision()
+        self.recall = SparseRecall()
+
+    def update_state(self, y_true, y_pred, sample_weight=None):
+        self.precision.update_state(y_true, y_pred, sample_weight)
+        self.recall.update_state(y_true, y_pred, sample_weight)
+
+    def result(self):
+        precision = self.precision.result()
+        recall = self.recall.result()
+        f1_score = 2 * (precision * recall) / (precision + recall + 1e-7)
+        return f1_score
+
+    def reset_state(self):
+        self.precision.reset_states()
+        self.recall.reset_states()
+
+    
+class SparsePrecision(tf.keras.metrics.Precision):
+    def update_state(self, y_true, y_pred, sample_weight=None):
+        y_true_one_hot = tf.one_hot(tf.cast(y_true, tf.int32), depth=tf.shape(y_pred)[-1])
+        y_true_one_hot = tf.squeeze(y_true_one_hot, axis=-2)
+        return super().update_state(y_true_one_hot, y_pred, sample_weight=sample_weight)
+
+class SparseRecall(tf.keras.metrics.Recall):
+    def update_state(self, y_true, y_pred, sample_weight=None):
+        y_true_one_hot = tf.one_hot(tf.cast(y_true, tf.int32), depth=tf.shape(y_pred)[-1])
+        y_true_one_hot = tf.squeeze(y_true_one_hot, axis=-2)
+        return super().update_state(y_true_one_hot, y_pred, sample_weight=sample_weight)
+
+
+
+METRICS = [
+    tf.keras.metrics.SparseCategoricalAccuracy (name='accuracy'),
+    SparsePrecision(name='precision'),
+    SparseRecall(name='recall'),
+    SparseF1Score(name='f1')#,
+    #tf.keras.metrics.AUC(from_logits=True, multi_label=True, name='auc'),
+    #tf.keras.metrics.AUC(from_logits=True, multi_label=True, name='prc', curve='PR'), # precision-recall curve
+]
+
 
 """*****************************************
 *      Frame Generator Functions           *
@@ -264,7 +314,6 @@ def create_data_splits(train_ratio=0.7, val_ratio=0.2, test_ratio=0.1, split_fil
         if not os.path.exists(folder):
             os.makedirs(folder)
 
-
     # Filter the video_codes based on the included_video_codes set
     video_codes = [vc for vc in os.listdir(LABELED_FOLDER) if vc in included_video_codes]
     
@@ -352,7 +401,7 @@ def cm_heatmap(actual, predicted, labels, savefigs=False, name='heatmap'):
     # Plot the original confusion matrix with integer values
     #heatmap2 = sns.heatmap(cm_num, annot=True, cbar=False, cmap=ListedColormap(['white']), fmt='d', ax=ax2)
     heatmap2 = sns.heatmap(cm, annot=True, cbar=False, cmap='BuPu', vmin=0.00, vmax=1.00, ax=ax2, square=True)
-    ax2.set_title('Confusion Matrix with Integer Values')
+    ax2.set_title('Confusion Matrix with Frequency Values')
     ax2.set_xlabel('Predicted Action')
     ax2.set_ylabel('Actual Action')
     ax2.xaxis.tick_bottom()
@@ -381,51 +430,62 @@ def cm_heatmap(actual, predicted, labels, savefigs=False, name='heatmap'):
     plt.tight_layout()
     
     if savefigs:
-        plt.savefig('figs/cm/'+name+'.png', bbox_inches='tight', dpi=1000)
+        plt.savefig('figs/cm/'+name+'.jpg', bbox_inches='tight', dpi=100)
     plt.close()    
     plt.clf()
 
 
 
 # Modified plot_train_val function
-def plot_train_val(history, title, savefigs=False):
-    # Create figure and axis objects
+def plot_metrics(history, metrics, title, savefigs=True):
     plt.clf()
-    fig, ax = plt.subplots(1, 2, figsize=(12, 5))
+    num_metrics = len(metrics)
+    num_rows = np.ceil(num_metrics / 2).astype(int)
+    fig, axes = plt.subplots(num_rows, 2, figsize=(12, 5 * num_rows))
+    
+    for i, metric in enumerate(metrics):
+        row, col = divmod(i, 2)
+        
+        if metric == 'loss':
+            train_metric_key = metric
+            val_metric_key = f"val_{metric}"
+        else:
+            train_metric_key = f"train_{metric}"
+            val_metric_key = f"val_{metric}"
+        
+        train_metric = history[train_metric_key]
+        val_metric = history[val_metric_key]
+        
+        axes[row, col].plot(train_metric, label='Train', marker='o')
+        axes[row, col].plot(val_metric, label='Validation', marker='^')
+        axes[row, col].set_xlabel('Epoch')
+        axes[row, col].set_ylabel(metric.capitalize())
+        axes[row, col].xaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True))
+        axes[row, col].spines['top'].set_visible(False)
+        axes[row, col].spines['right'].set_visible(False)
 
-    # Plot train and validation loss
-    ax[0].plot(history['loss'], label='Train', marker='o')
-    ax[0].plot(history['val_loss'], label='Validation', marker='^')
-    #ax[0].set_title('Loss')
-    ax[0].set_xlabel('Epoch')
-    ax[0].set_ylabel('Loss')
-    ax[0].set_ylim([0, 3])  # Adjust the y-axis limits
-    ax[0].xaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True))
-    ax[0].spines['top'].set_visible(False)
-    ax[0].spines['right'].set_visible(False)
+        if metric != 'loss' and not metric.startswith('train_loss'):
+            axes[row, col].set_ylim([0, 1])
 
-    # Plot train and validation accuracy
-    ax[1].plot(history['accuracy'], label='Train', marker='o')
-    ax[1].plot(history['val_accuracy'], label='Validation', marker='^')
-    #ax[1].set_title('Accuracy')
-    ax[1].set_xlabel('Epoch')
-    ax[1].set_ylabel('Accuracy')
-    ax[1].set_ylim([0, 1])  # Adjust the y-axis limits
-    ax[1].set_xticks(np.arange(len(history['accuracy'])))
-    ax[1].xaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True))
-    ax[1].spines['top'].set_visible(False)
-    ax[1].spines['right'].set_visible(False)
+        axes[row, col].legend(loc='best')
 
-    # Add legend and title
-    ax[0].legend(loc='best', fontsize='large')
-    ax[1].legend(loc='best', fontsize='large')
-    fig.suptitle(title, fontsize=16)
-
-    fig.tight_layout()
+    if num_metrics % 2 != 0:
+        fig.delaxes(axes[-1, -1])
+        
+    #fig.suptitle(title, fontsize=16)
+    fig.tight_layout(rect=[0, 0, 1, 0.96])
+    
     if savefigs:
-        plt.savefig('figs/loss/'+title+'.png', dpi=600)
-    plt.close() 
+        plt.savefig(f'figs/metrics/{title}.jpg', dpi=100)
+    plt.close()
     plt.clf()
+
+def plot_metrics_from_file(file_path, title, savefigs=True):
+    with open(file_path, 'r') as f:
+        history = json.load(f)
+
+    metrics = ['loss', 'accuracy', 'precision', 'recall', 'f1']
+    plot_metrics(history, metrics, title, savefigs)
     
 def batch_processing(vids, batch_size):
       num_batches = int(np.ceil(len(vids) / batch_size))
@@ -444,15 +504,13 @@ def plot_tsne(tsne_representation, labels, indices, savefigs=True, name='', x_li
     num_classes = len(np.unique(labels))
     colors = plt.cm.tab20b(np.linspace(0, 1, num_classes))
     markers = ['>','s','+','2','d','h', 'o','4',',','v','H','1','*','3','^','<','.','_','x','8','p','D']
-    print("made colors")
+
     plt.figure(figsize=(12, 8))
     unique_labels = np.unique(labels)
     for label, color, marker in zip(unique_labels, colors, markers[:num_classes]):
         label_indices = np.where(labels == label)
         plot_indices = np.intersect1d(label_indices, indices)
         plt.scatter(tsne_representation[plot_indices, 0], tsne_representation[plot_indices, 1], label=LABEL_NAMES[label], c=[color], marker=marker, alpha=1, s=150)
-    print("Did plot")
-
 
     plt.gca().spines['top'].set_visible(False)
     plt.gca().spines['right'].set_visible(False)
@@ -468,7 +526,7 @@ def plot_tsne(tsne_representation, labels, indices, savefigs=True, name='', x_li
     if not os.path.exists('figs/'):
         os.makedirs('figs/')
 
-    plt.savefig(os.path.join('figs/tsne/', f'{name}.png'), dpi=1000, bbox_inches='tight')
+    plt.savefig(os.path.join('figs/tsne/', f'{name}.jpg'), dpi=100, bbox_inches='tight')
     plt.close()
     
     return x_lim, y_lim
@@ -479,7 +537,6 @@ def plot_all_tsne(model):
     data = [(v, start, stop) for (v, start, stop) in combined_datasets.unbatch()]
     vids = np.array([v for v, _, _ in data])
     labels = np.array([l for _, l, _ in data])
-    print("Data prepared")
 
     # Get the penultimate layer of the model in batches
     batch_size = 8
@@ -508,9 +565,6 @@ def plot_all_tsne(model):
     plot_tsne(tsne_representation[:train_len], labels[:train_len], np.arange(train_len), name=f'tsne_{model.model_id.upper()}_train', x_lim=x_lim, y_lim=y_lim)
     plot_tsne(tsne_representation[train_len:train_len+val_len], labels[train_len:train_len+val_len], np.arange(val_len), name=f'tsne_{model.model_id.upper()}_val', x_lim=x_lim, y_lim=y_lim)
     plot_tsne(tsne_representation[train_len+val_len:], labels[train_len+val_len:], np.arange(test_len), name=f'tsne_{model.model_id.upper()}_test', x_lim=x_lim, y_lim=y_lim)
-
-    print("Finished plotting")
-
 
 """*****************************************
 *             MoViNet Helpers              *

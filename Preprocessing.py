@@ -20,7 +20,8 @@ def draw_bounding_box(path):
     ret, frame = cap.read()
     
     # Create a window to display the video frame
-    cv2.namedWindow('Video Frame')
+    cv2.namedWindow("Video Frame", cv2.WND_PROP_FULLSCREEN)
+    cv2.setWindowProperty('Video Frame', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
     
     # Define a callback function to handle mouse events
     def draw_box(event, x, y, flags, params):
@@ -222,8 +223,6 @@ def create_snippets(excel_path, data_folder, output_folder):
             folder_path = os.path.join(output_folder, video_name, behaviour)
             os.makedirs(folder_path, exist_ok=True)
 
-
-
             # Convert time to datetime object
             datetime_val = datetime.datetime.combine(datetime.date.today(), time_val)
             duration_val = datetime.datetime.combine(datetime.date.today(), duration)
@@ -279,5 +278,5 @@ def move_snippets_by_split():
         print("SPLIT file does not exist or is empty.")
 
 if __name__ == '__main__':  
-    #crop_rotate_video(path, out_path)
+    crop_rotate_video("data/self/long.mp4", "out_path.mp4")
     create_snippets('annotation_cues_jstab.xlsx', Utils.UNLABELED_FOLDER, Utils.LABELED_FOLDER)

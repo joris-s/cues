@@ -2,6 +2,7 @@ import tensorflow as tf
 import Utils
 from pathlib import Path
 from Baseline import BaselineModel
+import json
 
 
 class FewShotModel(BaselineModel):
@@ -40,8 +41,13 @@ class FewShotModel(BaselineModel):
             self.meta_val_ds = meta_val_ds.batch(self.batch_size)
         
     def train(self):
-        performance_history = {'loss': [], 'val_loss': [], 'accuracy': [], 'val_accuracy': []}
-
+        ph = {m.name: [] for m in Utils.METRICS}
+        performance_history = {'loss': [], 'val_loss': []}
+        
+        for metric_name in ph.keys():
+            performance_history[f'train_{metric_name}'] = []
+            performance_history[f'val_{metric_name}'] = []  
+            
         loss_obj = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
         optimizer = tf.keras.optimizers.Adam(learning_rate=1e-4)
 
@@ -49,7 +55,7 @@ class FewShotModel(BaselineModel):
         model_checkpoint = tf.keras.callbacks.ModelCheckpoint(filepath=self.checkpoint_dir+self.weights_file, 
                                                               monitor='val_loss', save_weights_only=True, save_best_only=True)
         
-        self.base_model.compile(loss=loss_obj, optimizer=optimizer, metrics=['accuracy'])
+        self.base_model.compile(loss=loss_obj, optimizer=optimizer, metrics=Utils.METRICS)
 
         def reset_labels(x, y, path):
             new_y = tf.reduce_min(tf.where(tf.equal(selected_class_indices, tf.cast(y, tf.int32))))
@@ -66,7 +72,7 @@ class FewShotModel(BaselineModel):
             filtered_train_ds = self.meta_train_ds.unbatch().filter(filter_func).map(reset_labels).batch(self.batch_size)
             filtered_test_ds = self.meta_val_ds.unbatch().filter(filter_func).map(reset_labels).batch(self.batch_size)
 
-            results = self.base_model.fit(Utils.remove_paths(filtered_train_ds),
+            _ = self.base_model.fit(Utils.remove_paths(filtered_train_ds),
                                           validation_data=Utils.remove_paths(filtered_test_ds),
                                           epochs=1, verbose=1)
             print(f"---Task {i+1}/{self.tasks}---")
@@ -81,6 +87,15 @@ class FewShotModel(BaselineModel):
                                       class_weight=Utils.get_class_weights(train),
                                       verbose=1)
         
-        for key in results.history.keys():
-            performance_history[key].extend(results.history[key])
+        for k in results.history.keys():
+            if k.startswith('val_'):
+                performance_history[k].extend(results.history[k])
+            elif k == 'loss':
+                performance_history[k].extend(results.history[k])
+            else:
+                performance_history[f'train_{k}'].extend(results.history[k])
+
         self.history = performance_history
+        
+        with open(f'metrics/metrics_{self.name}_{self.model_id}.txt', 'w') as f:
+            json.dump(performance_history, f, indent=4)

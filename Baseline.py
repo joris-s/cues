@@ -3,6 +3,7 @@ import Utils
 from pathlib import Path
 from sklearn.metrics import balanced_accuracy_score
 import os
+import json
 
 
 class BaselineModel:
@@ -53,8 +54,13 @@ class BaselineModel:
         self.output_signature = output_signature
     
     def train(self):
-        performance_history = {'loss': [], 'val_loss': [], 'accuracy': [], 'val_accuracy': []}
+        ph = {m.name: [] for m in Utils.METRICS}
+        performance_history = {'loss': [], 'val_loss': []}
         
+        for metric_name in ph.keys():
+            performance_history[f'train_{metric_name}'] = []
+            performance_history[f'val_{metric_name}'] = []        
+            
         loss_obj = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
         optimizer = tf.keras.optimizers.Adam(0.001)
 
@@ -64,7 +70,7 @@ class BaselineModel:
         
         train, val = Utils.remove_paths(self.train_ds), Utils.remove_paths(self.val_ds)
           
-        self.base_model.compile(loss=loss_obj, optimizer=optimizer, metrics=['accuracy'])
+        self.base_model.compile(loss=loss_obj, optimizer=optimizer, metrics=Utils.METRICS)
         results = self.base_model.fit(train,
                             validation_data=val,
                             epochs=self.epochs,
@@ -73,9 +79,18 @@ class BaselineModel:
                             class_weight=Utils.get_class_weights(train),
                             verbose=1)
         
-        for key in results.history.keys():
-            performance_history[key].extend(results.history[key])
+        for k in results.history.keys():
+            if k.startswith('val_'):
+                performance_history[k].extend(results.history[k])
+            elif k == 'loss':
+                performance_history[k].extend(results.history[k])
+            else:
+                performance_history[f'train_{k}'].extend(results.history[k])
         self.history = performance_history
+        
+        os.makedirs('metrics', exist_ok=True)
+        with open(f'metrics/metrics_{self.name}_{self.model_id}.txt', 'w') as f:
+            json.dump(performance_history, f, indent=4)
     
     def test(self):
         test = Utils.remove_paths(self.test_ds)
@@ -114,7 +129,7 @@ class BaselineModel:
         self.stream_model.set_weights(self.base_model.get_weights())
     
     def init_data(self, extension, train_path = "", val_path = "", test_path = ""):
-        Utils.create_data_splits(train_ratio=0.5, val_ratio=0.25, test_ratio=0.25)
+        #Utils.create_data_splits(train_ratio=0.5, val_ratio=0.25, test_ratio=0.25)
         if train_path != "":
             train_ds = tf.data.Dataset.from_generator(Utils.FrameGenerator(Path(train_path), self.num_frames,
                                                                            resolution = self.resolution,
@@ -149,7 +164,10 @@ class BaselineModel:
     def plot_train_val(self, savefig=True):
         title = f'Training history of {self.name} for {self.model_id.upper()}'
         try:
-            Utils.plot_train_val(self.history, title, savefig)
+            Utils.plot_metrics(self.history, 
+                               ['loss', 'accuracy', 'precision', 'recall', 'f1'], 
+                               title, savefig)
+
         except Exception as e:
             print(f'History not available, not making plots... {e}')
         

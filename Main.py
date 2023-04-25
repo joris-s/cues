@@ -1,6 +1,5 @@
 import os
 import argparse
-import numpy as np
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
 
 from Baseline import BaselineModel
@@ -23,7 +22,7 @@ parser.add_argument('--epochs-baseline', '-eb', type=int, default=5, metavar='N'
 
 # Define arguments for few-shot learning
 parser.add_argument('--meta-tasks', '-mt', type=int, default=5, metavar='N', help='Number of meta-training tasks for few-shot learning approach (default: 5)')
-parser.add_argument('--shots', '-sh', type=int, default=3, metavar='N', help='Number of meta-training data instances for few-shot learning approach, use -1 to use all samples (default: 3)')
+parser.add_argument('--shots', '-sh', type=int, default=-1, metavar='N', help='Number of meta-training data instances for few-shot learning approach, use -1 to use all samples (default: -1)')
 
 # Define arguments for active-learning
 parser.add_argument('--loops', '-l', type=int, default=3, metavar='N', help='Number of loops for active learning approach (default: 3)')
