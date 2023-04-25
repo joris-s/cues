@@ -165,4 +165,6 @@ cues/
 anaconda3/
 figs/
 metrics
+MoViNets/**/*.hdf5
+MoViNets/*/*.hdf5
 *.hdf5
