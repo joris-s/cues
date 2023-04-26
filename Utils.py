@@ -154,14 +154,15 @@ def frames_from_video_file(video_path, n_frames, output_size, frame_step=15):
     src.set(cv2.CAP_PROP_POS_FRAMES, start)
     ret, frame = src.read()
 
-    for _ in range(n_frames - 1):
-        for _ in range(frame_step):
+    for _ in range(n_frames):
+        for _ in range(frame_step-1):
             ret, frame = src.read()
         if ret:
             frame = format_frames(frame, output_size)
             result.append(frame)
         else:
-            result.append(np.zeros_like(result[0]))
+            print("did this!")
+            result.append(np.zeros((*output_size, 3)))
     src.release()
     result = np.array(result)[..., [2, 1, 0]]
 
@@ -222,8 +223,8 @@ class ProposalGenerator:
     def process_frames(self, src):
         frames = []
         try:
-            for _ in range(self.n_frames - 1):
-                for _ in range(self.frame_step):
+            for _ in range(self.n_frames):
+                for _ in range(self.frame_step-1):
                     ret, frame = src.read()
                 if ret:
                     frame = format_frames(frame, self.output_size)
@@ -384,7 +385,7 @@ def cm_heatmap(actual, predicted, labels, savefigs=False, name='heatmap'):
     
     # Plot the normalized confusion matrix
     heatmap1 = sns.heatmap(cm, annot=True, cbar=False, cmap='BuPu', vmin=0.00, vmax=1.00, ax=ax1, square=True)
-    ax1.set_title('Normalized Confusion Matrix')
+    ax1.set_title('Normalized Confusion Matrix', fontsize=16)
     ax1.set_xlabel('Predicted Action')
     ax1.set_ylabel('Actual Action')
     ax1.xaxis.tick_bottom()
@@ -401,7 +402,7 @@ def cm_heatmap(actual, predicted, labels, savefigs=False, name='heatmap'):
     # Plot the original confusion matrix with integer values
     #heatmap2 = sns.heatmap(cm_num, annot=True, cbar=False, cmap=ListedColormap(['white']), fmt='d', ax=ax2)
     heatmap2 = sns.heatmap(cm, annot=True, cbar=False, cmap='BuPu', vmin=0.00, vmax=1.00, ax=ax2, square=True)
-    ax2.set_title('Confusion Matrix with Frequency Values')
+    ax2.set_title('Confusion Matrix with Frequency Values', fontsize=16)
     ax2.set_xlabel('Predicted Action')
     ax2.set_ylabel('Actual Action')
     ax2.xaxis.tick_bottom()
@@ -435,7 +436,6 @@ def cm_heatmap(actual, predicted, labels, savefigs=False, name='heatmap'):
     plt.clf()
 
 
-
 # Modified plot_train_val function
 def plot_metrics(history, metrics, title, savefigs=True):
     plt.clf()
@@ -459,7 +459,7 @@ def plot_metrics(history, metrics, title, savefigs=True):
         axes[row, col].plot(train_metric, label='Train', marker='o')
         axes[row, col].plot(val_metric, label='Validation', marker='^')
         axes[row, col].set_xlabel('Epoch')
-        axes[row, col].set_ylabel(metric.capitalize())
+        axes[row, col].set_ylabel(metric.upper(), fontsize=16)
         axes[row, col].xaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True))
         axes[row, col].spines['top'].set_visible(False)
         axes[row, col].spines['right'].set_visible(False)

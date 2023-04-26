@@ -271,8 +271,8 @@ class ActiveLearningModel(BaselineModel):
             
             #Maybe not do this every time, but just recompute uncertainty over self.unlabeled_ds since it is still available
             #maybe only do this as fucntion of num_loops/len(self.available paths)
-            #self.unlabeled_path = self.unlabeled_paths.pop()
-            #self.init_unlabeled_data(self.unlabeled_path)
+            self.unlabeled_path = self.unlabeled_paths.pop()
+            self.init_unlabeled_data(self.unlabeled_path)
             
             self.labeled_ds, self.unlabeled_ds = self.select_samples(self.labeled_ds, self.unlabeled_ds, self.num_samples)
             

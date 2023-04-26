@@ -1,5 +1,6 @@
 import os
 import argparse
+import numpy as np
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
 
 from Baseline import BaselineModel
@@ -77,7 +78,7 @@ if __name__ == '__main__':
                     epochs=args.epochs_baseline, shots=args.shots, 
                     dropout=args.drop_out, 
                     resolution=Utils.MOVINET_PARAMS[b_id][0], 
-                    num_frames=Utils.MOVINET_PARAMS[b_id][1]*args.clip_length, 
+                    num_frames=int(2*np.floor(Utils.MOVINET_PARAMS[b_id][1]*args.clip_length/2)), 
                     num_classes=len(Utils.LABEL_NAMES),
                     batch_size=args.batch_size, 
                     frame_step=int(Utils.FPS/Utils.MOVINET_PARAMS[b_id][1]),
@@ -93,7 +94,7 @@ if __name__ == '__main__':
                     epochs=args.epochs_active_learning, shots=args.shots, 
                     dropout=args.drop_out, 
                     resolution=Utils.MOVINET_PARAMS[a_id][0], 
-                    num_frames=Utils.MOVINET_PARAMS[a_id][1]*args.clip_length, 
+                    num_frames=int(2*np.floor(Utils.MOVINET_PARAMS[a_id][1]*args.clip_length/2)), 
                     num_classes=len(Utils.LABEL_NAMES),
                     batch_size=args.batch_size, 
                     frame_step=int(Utils.FPS/Utils.MOVINET_PARAMS[a_id][1]),
@@ -108,7 +109,7 @@ if __name__ == '__main__':
                     epochs=args.epochs_few_shot, shots=args.shots, 
                     dropout=args.drop_out, 
                     resolution=Utils.MOVINET_PARAMS[f_id][0], 
-                    num_frames=Utils.MOVINET_PARAMS[f_id][1]*args.clip_length, 
+                    num_frames=int(2*np.floor(Utils.MOVINET_PARAMS[f_id][1]*args.clip_length/2)), 
                     num_classes=len(Utils.LABEL_NAMES),
                     batch_size=args.batch_size,
                     frame_step=int(Utils.FPS/Utils.MOVINET_PARAMS[f_id][1]),
@@ -125,6 +126,7 @@ if __name__ == '__main__':
         model.init_data('.mp4', Utils.TRAIN_FOLDER, Utils.VAL_FOLDER, Utils.TEST_FOLDER)
         if model.name == 'FSL':
             model.init_meta_data('.avi', Utils.META_TRAIN_FOLDER, Utils.META_VAL_FOLDER)
+        
         model.init_base_model()
         if not args.no_training:
             model.train()
