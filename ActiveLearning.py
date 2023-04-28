@@ -39,8 +39,7 @@ class ActiveLearningModel(BaselineModel):
                     self.unlabeled_paths.append(os.path.join(root, file))
 
         self.unlabeled_paths = [path for path in self.unlabeled_paths if not any(video_code in path for video_code in included_video_codes)]
-        np.random.shuffle(self.unlabeled_paths)
-        self.unlabeled_path = np.random.choice(self.unlabeled_paths)[0]
+        self.unlabeled_path = np.random.choice(self.unlabeled_paths)
         
                 
     def init_data(self, *args, **kwargs):
