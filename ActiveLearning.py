@@ -37,14 +37,18 @@ class ActiveLearningModel(BaselineModel):
             for file in files:
                 if file.endswith(".mp4"):
                     self.unlabeled_paths.append(os.path.join(root, file))
+
         self.unlabeled_paths = [path for path in self.unlabeled_paths if not any(video_code in path for video_code in included_video_codes)]
-    
+        np.random.shuffle(self.unlabeled_paths)
+        self.unlabeled_path = np.random.choice(self.unlabeled_paths)[0]
+        
+                
     def init_data(self, *args, **kwargs):
         super().init_data(*args, **kwargs)
         self.labeled_ds = self.train_ds
     
     def init_unlabeled_data(self, path, extension='.mp4'):
-            unlabeled_ds = tf.data.Dataset.from_generator(Utils.ProposalGenerator(self.base_model, path, 
+            unlabeled_ds = tf.data.Dataset.from_generator(Utils.ProposalGenerator(self.base_model, path,
                                    self.num_frames, Utils.MOVINET_PARAMS[self.model_id][0], 
                                    self.frame_step), output_signature = Utils.GENERATOR_SIGNATURE)
             self.unlabeled_ds = unlabeled_ds.batch(self.batch_size)
@@ -210,9 +214,7 @@ class ActiveLearningModel(BaselineModel):
             selected_indices = np.unique(np.concatenate(list(top_indices.values())))
             return selected_indices
 
-
-    
-        selected_indices = select_weighted_top_samples(vids, Utils.LABEL_NAMES, Utils.get_class_weights(self.unlabeled_ds))
+        selected_indices = uncertainty_sampling(vids, num_samples)#select_weighted_top_samples(vids, Utils.LABEL_NAMES, Utils.get_class_weights(self.unlabeled_ds))
         processed_frames, start_indices, stop_indices = zip(*data)
         processed_frames, start_indices, stop_indices = np.array(processed_frames), np.array(start_indices), np.array(stop_indices)
     
@@ -271,7 +273,7 @@ class ActiveLearningModel(BaselineModel):
             
             #Maybe not do this every time, but just recompute uncertainty over self.unlabeled_ds since it is still available
             #maybe only do this as fucntion of num_loops/len(self.available paths)
-            self.unlabeled_path = self.unlabeled_paths.pop()
+            self.unlabeled_path = np.random.choice(self.unlabeled_paths)
             self.init_unlabeled_data(self.unlabeled_path)
             
             self.labeled_ds, self.unlabeled_ds = self.select_samples(self.labeled_ds, self.unlabeled_ds, self.num_samples)
@@ -296,9 +298,10 @@ class ActiveLearningModel(BaselineModel):
                 performance_history[k].extend(results.history[k])
             else:
                 performance_history[f'train_{k}'].extend(results.history[k])
+                
         self.history = performance_history
         
         os.makedirs('metrics', exist_ok=True)
-        with open(f'metrics/metrics_{self.name}_{self.model_id}.txt', 'w') as f:
+        with open(f'Metrics {self.name} for {self.model_id}.txt', 'w') as f:
             json.dump(performance_history, f, indent=4)
 

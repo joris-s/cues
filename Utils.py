@@ -79,6 +79,39 @@ LABEL_NAMES = sorted(os.listdir(TRAIN_FOLDER))
 *                Metrics                   *
 *****************************************"""
 
+class SparsePrecision(tf.keras.metrics.Precision):
+    def update_state(self, y_true, y_pred, sample_weight=None):
+        y_true_one_hot = tf.one_hot(tf.cast(y_true, tf.int32), depth=tf.shape(y_pred)[-1])
+        y_true_one_hot = tf.squeeze(y_true_one_hot, axis=-2)
+        return super().update_state(y_true_one_hot, y_pred, sample_weight=sample_weight)
+
+class SparseRecall(tf.keras.metrics.Recall):
+    def update_state(self, y_true, y_pred, sample_weight=None):
+        y_true_one_hot = tf.one_hot(tf.cast(y_true, tf.int32), depth=tf.shape(y_pred)[-1])
+        y_true_one_hot = tf.squeeze(y_true_one_hot, axis=-2)
+        return super().update_state(y_true_one_hot, y_pred, sample_weight=sample_weight)
+
+class SparseBalancedAccuracy(tf.keras.metrics.Metric):
+    def __init__(self, num_classes, name='sparse_balanced_accuracy', **kwargs):
+        super(SparseBalancedAccuracy, self).__init__(name=name, **kwargs)
+        self.num_classes = num_classes
+        self.recalls = [SparseRecall(name=f'recall_{i}') for i in range(num_classes)]
+
+    def update_state(self, y_true, y_pred, sample_weight=None):
+        y_pred_one_hot = tf.one_hot(tf.argmax(y_pred, axis=-1), depth=self.num_classes)
+    
+        for i, recall in enumerate(self.recalls):
+            y_true_i = tf.cast(tf.equal(y_true, i), dtype=tf.int32)
+            recall.update_state(y_true_i, y_pred_one_hot[..., i], sample_weight)
+
+    def result(self):
+        return tf.reduce_mean([recall.result() for recall in self.recalls])
+
+    def reset_states(self):
+        for recall in self.recalls:
+            recall.reset_states()
+
+            
 class SparseF1Score(tf.keras.metrics.Metric):
     def __init__(self, name='sparse_f1_score', **kwargs):
         super(SparseF1Score, self).__init__(name=name, **kwargs)
@@ -99,28 +132,14 @@ class SparseF1Score(tf.keras.metrics.Metric):
         self.precision.reset_states()
         self.recall.reset_states()
 
-    
-class SparsePrecision(tf.keras.metrics.Precision):
-    def update_state(self, y_true, y_pred, sample_weight=None):
-        y_true_one_hot = tf.one_hot(tf.cast(y_true, tf.int32), depth=tf.shape(y_pred)[-1])
-        y_true_one_hot = tf.squeeze(y_true_one_hot, axis=-2)
-        return super().update_state(y_true_one_hot, y_pred, sample_weight=sample_weight)
-
-class SparseRecall(tf.keras.metrics.Recall):
-    def update_state(self, y_true, y_pred, sample_weight=None):
-        y_true_one_hot = tf.one_hot(tf.cast(y_true, tf.int32), depth=tf.shape(y_pred)[-1])
-        y_true_one_hot = tf.squeeze(y_true_one_hot, axis=-2)
-        return super().update_state(y_true_one_hot, y_pred, sample_weight=sample_weight)
-
 
 
 METRICS = [
-    tf.keras.metrics.SparseCategoricalAccuracy (name='accuracy'),
+    tf.keras.metrics.SparseCategoricalAccuracy(name='accuracy'),
+    #SparseBalancedAccuracy(len(LABEL_NAMES), name='balanced accuracy'),
     SparsePrecision(name='precision'),
     SparseRecall(name='recall'),
-    SparseF1Score(name='f1')#,
-    #tf.keras.metrics.AUC(from_logits=True, multi_label=True, name='auc'),
-    #tf.keras.metrics.AUC(from_logits=True, multi_label=True, name='prc', curve='PR'), # precision-recall curve
+    SparseF1Score(name='f1')
 ]
 
 
@@ -161,7 +180,6 @@ def frames_from_video_file(video_path, n_frames, output_size, frame_step=15):
             frame = format_frames(frame, output_size)
             result.append(frame)
         else:
-            print("did this!")
             result.append(np.zeros((*output_size, 3)))
     src.release()
     result = np.array(result)[..., [2, 1, 0]]
@@ -215,6 +233,7 @@ class ProposalGenerator:
     def __init__(self, model, path, n_frames, resolution, frame_step, extension='.mp4'):
         self.model = model
         self.path = path
+        self.start = 0
         self.n_frames = n_frames
         self.output_size = (resolution, resolution)
         self.extension = extension
@@ -230,6 +249,7 @@ class ProposalGenerator:
                     frame = format_frames(frame, self.output_size)
                     frames.append(frame)
                 else:
+                    print("Could not read frame {frame}")
                     frames.append(np.zeros_like(frames[0]))
         except Exception as e:
             print(f'Error occured, stopping instance generation: {e}')
@@ -243,6 +263,12 @@ class ProposalGenerator:
         src.set(cv2.CAP_PROP_POS_FRAMES, starting_frame)
         result = self.process_frames(src)
         next_result = self.process_frames(src)
+                
+        if isinstance(result, bool):
+            return False, None, None
+        if isinstance(next_result, bool):
+            return False, None, None
+        
         label, next_label = self.get_label(result), self.get_label(next_result)
         counter = 0
 
@@ -262,12 +288,18 @@ class ProposalGenerator:
     def __call__(self):
         cap = cv2.VideoCapture(self.path)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        starting_frame = 0
+        self.start = np.random.randint(0, total_frames-9000) #10 min
+        starting_frame = self.start
 
         while starting_frame < (total_frames - self.n_frames):
+            
+            if starting_frame > (self.start+9000):
+                break
+        
             processed_frames, start_index, stop_index = self.sliding_frames_from_video(starting_frame, cap)
             if isinstance(processed_frames, np.ndarray) == False:
                 break
+            
             starting_frame = stop_index + 1
             yield processed_frames, tf.cast(start_index, tf.int32), tf.cast(stop_index, tf.int32)
 
@@ -431,7 +463,7 @@ def cm_heatmap(actual, predicted, labels, savefigs=False, name='heatmap'):
     plt.tight_layout()
     
     if savefigs:
-        plt.savefig('figs/cm/'+name+'.jpg', bbox_inches='tight', dpi=100)
+        plt.savefig('figs/cm/'+name+'.png', bbox_inches='tight', dpi=100)
     plt.close()    
     plt.clf()
 
@@ -476,7 +508,7 @@ def plot_metrics(history, metrics, title, savefigs=True):
     fig.tight_layout(rect=[0, 0, 1, 0.96])
     
     if savefigs:
-        plt.savefig(f'figs/metrics/{title}.jpg', dpi=100)
+        plt.savefig(f'figs/metrics/{title}.png', dpi=100)
     plt.close()
     plt.clf()
 
@@ -484,7 +516,7 @@ def plot_metrics_from_file(file_path, title, savefigs=True):
     with open(file_path, 'r') as f:
         history = json.load(f)
 
-    metrics = ['loss', 'accuracy', 'precision', 'recall', 'f1']
+    metrics = ['loss', 'accuracy', 'balanced accuracy', 'precision', 'recall', 'f1']
     plot_metrics(history, metrics, title, savefigs)
     
 def batch_processing(vids, batch_size):
@@ -526,7 +558,7 @@ def plot_tsne(tsne_representation, labels, indices, savefigs=True, name='', x_li
     if not os.path.exists('figs/'):
         os.makedirs('figs/')
 
-    plt.savefig(os.path.join('figs/tsne/', f'{name}.jpg'), dpi=100, bbox_inches='tight')
+    plt.savefig(os.path.join('figs/tsne/', f'{name}.png'), dpi=100, bbox_inches='tight')
     plt.close()
     
     return x_lim, y_lim

@@ -1,7 +1,7 @@
 import tensorflow as tf
 import Utils
 from pathlib import Path
-from sklearn.metrics import balanced_accuracy_score
+from sklearn.metrics import accuracy_score, balanced_accuracy_score, precision_score, recall_score, f1_score
 import os
 import json
 
@@ -31,7 +31,6 @@ class BaselineModel:
     epochs: int
     output_signature: list
     
-    test_acc: float
     history: dict
     
     def __init__(self, model_id, model_type, epochs, shots, dropout,
@@ -89,13 +88,22 @@ class BaselineModel:
         self.history = performance_history
         
         os.makedirs('metrics', exist_ok=True)
-        with open(f'metrics/metrics_{self.name}_{self.model_id}.txt', 'w') as f:
+        with open(f'metrics/Metrics {self.name} for {self.model_id}.txt', 'w') as f:
             json.dump(performance_history, f, indent=4)
     
     def test(self):
         test = Utils.remove_paths(self.test_ds)
         self.actual, self.predicted = Utils.get_actual_predicted_labels(test, self.base_model)
-        self.test_acc = balanced_accuracy_score(self.actual, self.predicted)
+        
+        acc = accuracy_score(self.actual, self.predicted)
+        balanced_acc = balanced_accuracy_score(self.actual, self.predicted)
+        precision = precision_score(self.actual, self.predicted, average='weighted', zero_division=0)
+        recall = recall_score(self.actual, self.predicted, average='weighted')
+        f1 = f1_score(self.actual, self.predicted, average='weighted')
+        
+        with open(f'metrics/Metrics {self.name} for {self.model_id}.txt', 'a') as f:
+            f.write(f"\nacc={acc}, balanced_acc={balanced_acc}, precision={precision}, recall={recall}, f1={f1}")
+            
         
     def predict(self, ds):
         labels = self.base_model.predict(ds)
@@ -162,7 +170,7 @@ class BaselineModel:
             
     # Modified plot_train_val function
     def plot_train_val(self, savefig=True):
-        title = f'Training history of {self.name} for {self.model_id.upper()}'
+        title = f'Training History {self.name} for {self.model_id.upper()}'
         try:
             Utils.plot_metrics(self.history, 
                                ['loss', 'accuracy', 'precision', 'recall', 'f1'], 
@@ -174,9 +182,9 @@ class BaselineModel:
     def plot_confusion_matrix(self, savefig=True):
         try:
             Utils.cm_heatmap(self.actual, self.predicted, self.label_names, savefig, 
-                       (f'Confusion Matrix {self.name} for {self.model_id.upper()} - %.2f Acc' % self.test_acc))
+                       (f'Confusion Matrix {self.name} for {self.model_id.upper()}'))
         except Exception as e:
             print(f"We found the error: {e}\nNow doing testing again...")
             self.test()
             Utils.cm_heatmap(self.actual, self.predicted, self.label_names, savefig, 
-                       (f'Confusion Matrix {self.name} for {self.model_id.upper()} - %.2f Acc' % self.test_acc))
+                       (f'Confusion Matrix {self.name} for {self.model_id.upper()}'))
