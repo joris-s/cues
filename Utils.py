@@ -90,27 +90,6 @@ class SparseRecall(tf.keras.metrics.Recall):
         y_true_one_hot = tf.one_hot(tf.cast(y_true, tf.int32), depth=tf.shape(y_pred)[-1])
         y_true_one_hot = tf.squeeze(y_true_one_hot, axis=-2)
         return super().update_state(y_true_one_hot, y_pred, sample_weight=sample_weight)
-
-class SparseBalancedAccuracy(tf.keras.metrics.Metric):
-    def __init__(self, num_classes, name='sparse_balanced_accuracy', **kwargs):
-        super(SparseBalancedAccuracy, self).__init__(name=name, **kwargs)
-        self.num_classes = num_classes
-        self.recalls = [SparseRecall(name=f'recall_{i}') for i in range(num_classes)]
-
-    def update_state(self, y_true, y_pred, sample_weight=None):
-        y_pred_one_hot = tf.one_hot(tf.argmax(y_pred, axis=-1), depth=self.num_classes)
-    
-        for i, recall in enumerate(self.recalls):
-            y_true_i = tf.cast(tf.equal(y_true, i), dtype=tf.int32)
-            recall.update_state(y_true_i, y_pred_one_hot[..., i], sample_weight)
-
-    def result(self):
-        return tf.reduce_mean([recall.result() for recall in self.recalls])
-
-    def reset_states(self):
-        for recall in self.recalls:
-            recall.reset_states()
-
             
 class SparseF1Score(tf.keras.metrics.Metric):
     def __init__(self, name='sparse_f1_score', **kwargs):
@@ -132,11 +111,8 @@ class SparseF1Score(tf.keras.metrics.Metric):
         self.precision.reset_states()
         self.recall.reset_states()
 
-
-
 METRICS = [
     tf.keras.metrics.SparseCategoricalAccuracy(name='accuracy'),
-    #SparseBalancedAccuracy(len(LABEL_NAMES), name='balanced accuracy'),
     SparsePrecision(name='precision'),
     SparseRecall(name='recall'),
     SparseF1Score(name='f1')
@@ -326,15 +302,19 @@ def remove_indices(ds):
         return frames
     return ds.map(select_frames)
 
+def scale_class_weights(class_weights, target_loss, current_loss, num_classes):
+    loss_ratio = target_loss / current_loss
+    scaling_factor = loss_ratio / num_classes
+    scaled_weights = {k: v * scaling_factor for k, v in class_weights.items()}
+    return scaled_weights
+
 def get_class_weights(ds):
     labels = [int(label) for _, label in ds.unbatch()]
     total_labels = len(labels)
     class_weights = {i: 1/(labels.count(i)/total_labels) for i in range(len(list(set(labels))))}
     class_weight_sum = sum(class_weights.values())
-    class_weight = {k: v/class_weight_sum for k, v in class_weights.items()}
-    return class_weight
-
-
+    class_weights = {k: v/class_weight_sum for k, v in class_weights.items()}
+    return scale_class_weights(class_weights, target_loss=2.5, current_loss=0.05, num_classes=len(LABEL_NAMES))
 
 def create_data_splits(train_ratio=0.7, val_ratio=0.2, test_ratio=0.1, split_file='data/slapi/SPLIT', include_file='data/slapi/INCLUDE'):
     # Read the INCLUDE file and create a set of video codes to be included

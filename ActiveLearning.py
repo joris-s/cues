@@ -95,10 +95,7 @@ class ActiveLearningModel(BaselineModel):
                 name = f"{time_str}-{self.unlabeled_path[-16:-4]}"
                 vid_dir = f'{Utils.AL_FOLDER}/{label if isinstance(label, str) else Utils.LABEL_NAMES[label]}'
                 name = f'{label if isinstance(label, str) else Utils.LABEL_NAMES[label]}-{name}'
-                print(f"{vid_dir}/{name}.mp4")
-                print(f"Dimensions of first frame: {played_frames[0]}")
-                input()
-                
+
                 if isinstance(label, int): saved_paths.append(f"{vid_dir}/{name}.mp4")
                 if not os.path.exists(vid_dir): os.mkdir(vid_dir)
                 out = cv2.VideoWriter(f"{vid_dir}/{name}.mp4", cv2.VideoWriter_fourcc(*'mp4v'), 30, (played_frames[0].shape[1], played_frames[0].shape[0]))
@@ -132,7 +129,7 @@ class ActiveLearningModel(BaselineModel):
                 result, cap = [], cv2.VideoCapture(path)
                 cap.set(cv2.CAP_PROP_POS_FRAMES, start)
                 
-                for _ in range(self.num_frames-1):
+                for _ in range(self.num_frames):
                     for _ in range(self.frame_step): ret, frame = cap.read()
                     if ret: frame = Utils.format_frames(frame, (self.resolution, self.resolution)); result.append(frame)
                     else: result.append(np.zeros_like(result[0]))
@@ -158,10 +155,7 @@ class ActiveLearningModel(BaselineModel):
                 
                 except Exception as ex: print(f"Something went wrong with this label, skipping it: {ex}"); break
         
-        labels = np.array(labels) 
-        samples = np.array(return_samples)
-        paths = np.array(saved_paths)
-        return labels, samples, paths
+        return np.array(labels), np.array(return_samples), np.array(saved_paths)
 
     def select_samples(self, labeled_ds, unlabeled_ds, num_samples):
 
@@ -206,23 +200,30 @@ class ActiveLearningModel(BaselineModel):
             selected_indices = tf.where(entropies < threshold)
             return tf.squeeze(selected_indices)[:num_samples]
         
-        #selects indices per class max activation and corrected per class        
-        def select_weighted_top_samples(vids, classes, samples_per_class):
+        def select_weighted_top_samples(vids, classes, class_weights):
             unlabeled_probs = tf.nn.softmax(self.base_model(vids))
-            
+
+            # Normalize the class weights so they sum up to 1
+            normalized_weights = [w/np.sum(list(class_weights.values())) for w in list(class_weights.values())]
+
             top_indices = {}
             for class_idx in range(len(classes)):
                 class_probs = unlabeled_probs[:, class_idx]
-                num_samples = samples_per_class#samples_per_class[class_idx]
+
+                # Calculate number of samples for the class based on its weight
+                num_samples = int(normalized_weights[class_idx] * self.num_samples) # total_samples is the total number of samples you want to select
+
+                # Edge case: when num_samples turns out to be zero
+                num_samples = max(1, num_samples) # ensure at least one sample is selected
+
                 topk_indices = tf.math.top_k(class_probs, k=num_samples).indices
                 top_indices[class_idx] = topk_indices.numpy()
-            
+
             selected_indices = np.unique(np.concatenate(list(top_indices.values())))
             return selected_indices
 
+        selected_indices = select_weighted_top_samples(vids, Utils.LABEL_NAMES, Utils.get_class_weights(Utils.remove_paths(self.labeled_ds)))
 
-        #selected_indices = uncertainty_sampling(vids, num_samples)
-        selected_indices = select_weighted_top_samples(vids, Utils.LABEL_NAMES, self.num_samples)
         processed_frames, start_indices, stop_indices = zip(*data)
         processed_frames, start_indices, stop_indices = np.array(processed_frames), np.array(start_indices), np.array(stop_indices)
     
