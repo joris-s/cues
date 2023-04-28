@@ -249,8 +249,7 @@ class ProposalGenerator:
                     frame = format_frames(frame, self.output_size)
                     frames.append(frame)
                 else:
-                    print("Could not read frame {frame}")
-                    frames.append(np.zeros_like(frames[0]))
+                    frames.append(np.zeros((*self.output_size, 3)))
         except Exception as e:
             print(f'Error occured, stopping instance generation: {e}')
             return False

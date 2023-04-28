@@ -97,5 +97,5 @@ class FewShotModel(BaselineModel):
 
         self.history = performance_history
         
-        with open(f'metrics/Metrics {self.name} for {self.model_id}.txt', 'w') as f:
+        with open(f'metrics/Metrics {self.name} for {self.model_id.upper()}.txt', 'w') as f:
             json.dump(performance_history, f, indent=4)

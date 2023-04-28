@@ -68,15 +68,15 @@ print("----------")
 
 if __name__ == '__main__':
     
-    #args.active_learning = ['a0']
-    args.baseline = ['a0']
-    args.epochs_active_learning = 3
-    args.epochs_baseline = 1
-    args.shots = 3
-    args.clip_length = 3
-    args.batch_size=16
-    args.loops = 1
-    args.num_samples = 1
+    # args.active_learning = ['a0']
+    # #args.baseline = ['a0']
+    # args.epochs_active_learning = 3
+    # args.epochs_baseline = 1
+    # args.shots = 3
+    # args.clip_length = 3
+    # args.batch_size=16
+    # args.loops = 1
+    # args.num_samples = 1
 
     b_models=[]
     a_models=[]

@@ -89,11 +89,15 @@ class ActiveLearningModel(BaselineModel):
                 return frames
             
             def save_video(played_frames: List[np.ndarray], label: Union[int, str]) -> None:
+                
                 now = datetime.datetime.now()
                 time_str = now.strftime("%H:%M:%S").replace(":", "_")
-                name = f"{time_str}-{self.unlabeled_path[-15:-4]}"
+                name = f"{time_str}-{self.unlabeled_path[-16:-4]}"
                 vid_dir = f'{Utils.AL_FOLDER}/{label if isinstance(label, str) else Utils.LABEL_NAMES[label]}'
                 name = f'{label if isinstance(label, str) else Utils.LABEL_NAMES[label]}-{name}'
+                print(f"{vid_dir}/{name}.mp4")
+                print(f"Dimensions of first frame: {played_frames[0]}")
+                input()
                 
                 if isinstance(label, int): saved_paths.append(f"{vid_dir}/{name}.mp4")
                 if not os.path.exists(vid_dir): os.mkdir(vid_dir)
@@ -135,7 +139,6 @@ class ActiveLearningModel(BaselineModel):
                 cap.release() 
                 
                 return np.array(result)[..., [2, 1, 0]]
-                
             
             label = None
             while label is None:
@@ -155,7 +158,10 @@ class ActiveLearningModel(BaselineModel):
                 
                 except Exception as ex: print(f"Something went wrong with this label, skipping it: {ex}"); break
         
-        return np.array(labels), np.array(return_samples), np.array(saved_paths)
+        labels = np.array(labels) 
+        samples = np.array(return_samples)
+        paths = np.array(saved_paths)
+        return labels, samples, paths
 
     def select_samples(self, labeled_ds, unlabeled_ds, num_samples):
 
@@ -207,13 +213,16 @@ class ActiveLearningModel(BaselineModel):
             top_indices = {}
             for class_idx in range(len(classes)):
                 class_probs = unlabeled_probs[:, class_idx]
-                topk_indices = tf.math.top_k(class_probs, k=samples_per_class[class_idx]).indices
+                num_samples = samples_per_class#samples_per_class[class_idx]
+                topk_indices = tf.math.top_k(class_probs, k=num_samples).indices
                 top_indices[class_idx] = topk_indices.numpy()
             
             selected_indices = np.unique(np.concatenate(list(top_indices.values())))
             return selected_indices
 
-        selected_indices = uncertainty_sampling(vids, num_samples)#select_weighted_top_samples(vids, Utils.LABEL_NAMES, Utils.get_class_weights(self.unlabeled_ds))
+
+        #selected_indices = uncertainty_sampling(vids, num_samples)
+        selected_indices = select_weighted_top_samples(vids, Utils.LABEL_NAMES, self.num_samples)
         processed_frames, start_indices, stop_indices = zip(*data)
         processed_frames, start_indices, stop_indices = np.array(processed_frames), np.array(start_indices), np.array(stop_indices)
     
@@ -244,7 +253,7 @@ class ActiveLearningModel(BaselineModel):
 
         loss_obj = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
         optimizer = tf.keras.optimizers.Adam()
-        self.base_model.compile(loss=loss_obj, optimizer=optimizer, metrics=['accuracy'])
+        self.base_model.compile(loss=loss_obj, optimizer=optimizer, metrics=Utils.METRICS)
 
         for i in range(self.num_loops):
             train, val = Utils.remove_paths(self.labeled_ds), Utils.remove_paths(self.val_ds)
@@ -301,6 +310,6 @@ class ActiveLearningModel(BaselineModel):
         self.history = performance_history
         
         os.makedirs('metrics', exist_ok=True)
-        with open(f'Metrics {self.name} for {self.model_id}.txt', 'w') as f:
+        with open(f'metrics/Metrics {self.name} for {self.model_id.upper()}.txt', 'w') as f:
             json.dump(performance_history, f, indent=4)
 

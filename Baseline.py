@@ -88,7 +88,7 @@ class BaselineModel:
         self.history = performance_history
         
         os.makedirs('metrics', exist_ok=True)
-        with open(f'metrics/Metrics {self.name} for {self.model_id}.txt', 'w') as f:
+        with open(f'metrics/Metrics {self.name} for {self.model_id.upper()}.txt', 'w') as f:
             json.dump(performance_history, f, indent=4)
     
     def test(self):
@@ -101,7 +101,7 @@ class BaselineModel:
         recall = recall_score(self.actual, self.predicted, average='weighted')
         f1 = f1_score(self.actual, self.predicted, average='weighted')
         
-        with open(f'metrics/Metrics {self.name} for {self.model_id}.txt', 'a') as f:
+        with open(f'metrics/Metrics {self.name} for {self.model_id.upper()}.txt', 'a') as f:
             f.write(f"\nacc={acc}, balanced_acc={balanced_acc}, precision={precision}, recall={recall}, f1={f1}")
             
         
