@@ -35,8 +35,9 @@ class FewShotModel(BaselineModel):
         if val_path != "":
             meta_val_ds = tf.data.Dataset.from_generator(Utils.FrameGenerator(Path(val_path), self.num_frames, 
                                                                            resolution = self.resolution,
-                                                                              extension=extension,
-                                                                              frame_step=self.frame_step),
+                                                                           shots=self.shots,
+                                                                           extension=extension,
+                                                                           frame_step=self.frame_step),
                                                              output_signature = self.output_signature)
             self.meta_val_ds = meta_val_ds.batch(self.batch_size)
         
@@ -70,10 +71,8 @@ class FewShotModel(BaselineModel):
             selected_class_indices = tf.random.shuffle(tf.range(self.meta_classes))[:self.num_classes]
             
             filtered_train_ds = self.meta_train_ds.unbatch().filter(filter_func).map(reset_labels).batch(self.batch_size)
-            filtered_test_ds = self.meta_val_ds.unbatch().filter(filter_func).map(reset_labels).batch(self.batch_size)
 
             _ = self.base_model.fit(Utils.remove_paths(filtered_train_ds),
-                                          validation_data=Utils.remove_paths(filtered_test_ds),
                                           epochs=1, verbose=1)
             print(f"---Task {i+1}/{self.tasks}---")
             

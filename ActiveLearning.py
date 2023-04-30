@@ -248,7 +248,7 @@ class ActiveLearningModel(BaselineModel):
             performance_history[f'train_{metric_name}'] = []
             performance_history[f'val_{metric_name}'] = []  
         
-        early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=3)
+        early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=2)
         model_checkpoint = tf.keras.callbacks.ModelCheckpoint(filepath=self.checkpoint_dir + self.weights_file,
                                                               monitor='val_loss', save_weights_only=True, save_best_only=True)
 
@@ -289,12 +289,13 @@ class ActiveLearningModel(BaselineModel):
             
             os.system('cls' if os.name == 'nt' else 'clear')
     
+        early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=5)
         train, val = Utils.remove_paths(self.labeled_ds), Utils.remove_paths(self.val_ds)
         # Train the final model using the best weights
         self.base_model.load_weights(self.checkpoint_dir + self.weights_file)
         results = self.base_model.fit(train,
                             validation_data=val,
-                            epochs=self.epochs,
+                            epochs=5,
                             callbacks=[model_checkpoint, early_stopping],
                             validation_freq=1,
                             class_weight=Utils.get_class_weights(train),
