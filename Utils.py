@@ -8,7 +8,6 @@ import cv2
 import matplotlib
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
-from matplotlib.colors import ListedColormap
 import numpy as np
 import seaborn as sns
 import tensorflow as tf
@@ -463,6 +462,7 @@ def plot_metrics(history, metrics, title, savefigs=True):
         else:
             train_metric_key = f"train_{metric}"
             val_metric_key = f"val_{metric}"
+            
         
         train_metric = history[train_metric_key]
         val_metric = history[val_metric_key]
@@ -470,13 +470,15 @@ def plot_metrics(history, metrics, title, savefigs=True):
         axes[row, col].plot(train_metric, label='Train', marker='o')
         axes[row, col].plot(val_metric, label='Validation', marker='^')
         axes[row, col].set_xlabel('Epoch')
-        axes[row, col].set_ylabel(metric.upper(), fontsize=16)
+        axes[row, col].set_ylabel(metric.upper(), fontsize=16, fontdict=dict(weight='bold'))
         axes[row, col].xaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True))
         axes[row, col].spines['top'].set_visible(False)
         axes[row, col].spines['right'].set_visible(False)
 
         if metric != 'loss' and not metric.startswith('train_loss'):
-            axes[row, col].set_ylim([0, 1])
+            axes[row, col].set_ylim([0, 1.1])
+        else:
+            axes[row, col].set_ylim([0, 20])
 
         axes[row, col].legend(loc='best')
 
@@ -550,7 +552,7 @@ def plot_all_tsne(model):
     labels = np.array([l for _, l, _ in data])
 
     # Get the penultimate layer of the model in batches
-    batch_size = 8
+    batch_size = 4
     penultimate_features = []
     for i, batch_vids in enumerate(batch_processing(vids, batch_size)):
         print(f"Processing batch {i + 1}")
@@ -581,11 +583,20 @@ def plot_all_tsne(model):
 *             MoViNet Helpers              *
 *****************************************"""
     
-def AIPCreateBackboneAndClassifierModel(model_id, num_classes, frames_number, batch_size, resolution, 
+def AIPCreateBackboneAndClassifierModel(model_id, 
+                                        num_classes, 
+                                        frames_number, 
+                                        batch_size, 
+                                        resolution, 
                                         train_whole_model, dropout,
                                         checkpoint_dir,
-                                        conv_type: str = '3d', se_type: str = '3d', activation: str = 'swish',
-                                        gating_activation: str = 'sigmoid', stream_mode=False, load_pretrained_weights=True, training=True):
+                                        conv_type: str = '3d', 
+                                        se_type: str = '3d', 
+                                        activation: str = 'swish',
+                                        gating_activation: str = 'sigmoid', 
+                                        stream_mode=False, 
+                                        load_pretrained_weights=True, 
+                                        regularization=None):
  
   tf.keras.backend.clear_session()
   backbone = movinet.Movinet(model_id=model_id,
@@ -614,7 +625,7 @@ def AIPCreateBackboneAndClassifierModel(model_id, num_classes, frames_number, ba
         num_classes=num_classes, 
         output_states=stream_mode,
         dropout_rate = dropout,
-        kernel_regularizer="l2"
+        kernel_regularizer=regularization
         )
   
   model.build([batch_size, frames_number, resolution, resolution, 3])

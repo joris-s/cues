@@ -35,7 +35,7 @@ class BaselineModel:
     
     def __init__(self, model_id, model_type, epochs, shots, dropout,
                  resolution, num_frames, num_classes, label_names, batch_size, 
-                 frame_step, output_signature):
+                 frame_step, train_backbone, regularization, output_signature):
         self.name = "Baseline"
         self.model_id = model_id
         self.model_type = model_type
@@ -50,6 +50,8 @@ class BaselineModel:
         self.dropout = dropout
         self.batch_size = batch_size
         self.frame_step = frame_step
+        self.train_backbone = train_backbone
+        self.regularization = regularization
         self.output_signature = output_signature
     
     def train(self):
@@ -63,7 +65,7 @@ class BaselineModel:
         loss_obj = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
         optimizer = tf.keras.optimizers.Adam(0.001)
 
-        early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=5)
+        early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=3)
         model_checkpoint = tf.keras.callbacks.ModelCheckpoint(filepath=self.checkpoint_dir+self.weights_file, 
                                                               monitor='val_loss', save_weights_only=True, save_best_only=True)
         
@@ -118,9 +120,10 @@ class BaselineModel:
                                                          frames_number=self.num_frames, 
                                                          batch_size=self.batch_size, 
                                                          resolution=self.resolution, 
-                                                         train_whole_model=False, 
+                                                         train_whole_model=self.train_backbone, 
                                                          dropout=self.dropout,
                                                          checkpoint_dir=self.checkpoint_dir,
+                                                         regularization=self.regularization,
                                                          stream_mode=False)
     
     def init_streaming_model(self):
@@ -129,9 +132,10 @@ class BaselineModel:
                                                          frames_number=self.num_frames, 
                                                          batch_size=self.batch_size, 
                                                          resolution=self.resolution, 
-                                                         train_whole_model=False, 
-                                                         dropout=0.0,
+                                                         train_whole_model=self.train_backbone, 
+                                                         dropout=self.dropout,
                                                          checkpoint_dir=self.checkpoint_dir,
+                                                         regularization=self.regularization,
                                                          stream_mode=True)
 
         self.stream_model.set_weights(self.base_model.get_weights())

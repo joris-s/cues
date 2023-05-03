@@ -31,11 +31,13 @@ parser.add_argument('--num-samples', '-ns', type=int, default=3, metavar='N', he
 
 # Add an option for disabling training and loading possible weights instead
 parser.add_argument('--no-training', '-nt', action='store_true', help='Disable training and just load possible weights instead')
+parser.add_argument('--train-backbone', '-tb', action='store_true', help='Train the MoViNet backbone as well as classification head')
 
 # Add an option for data batch size
 parser.add_argument('--batch-size', '-bs', type=int, default=16, metavar='N', help='Batch size of datasets for training and testing (default: 16)')
 parser.add_argument('--clip-length', '-cl', type=int, default=3, metavar='N', help='Target length of clips, used to compute num_frames(target-fps*cl) per snippet (default: 3)')
 parser.add_argument('--drop-out', '-do', type=float, default=0.5, metavar='P', help='floating-point dropout probability (default: 0.5)')
+parser.add_argument('--regularization', '-rg', type=str, default=None, metavar='TYPE', help='Type of regularization for the model (options: "l1", "l2", etc., default: None)')
 
 
 # Parse the arguments
@@ -58,25 +60,17 @@ print()
 print(f"loops: {args.loops}")
 print(f"num-samples: {args.num_samples}")
 print()
+print(f"train-backbone: {args.train_backbone}")
 print(f"no-training: {args.no_training}")
 print(f"batch-size: {args.batch_size}")
 print(f"clip-length: {args.clip_length}")
 print(f"drop-out: {args.drop_out}")
+print(f"regularization: {args.regularization}")
 print("----------")
 
 #python Main.py -b a0 a1 a2 a3 a4 a5 -a a3 --epochs-active-learning 5 --loops 1 --num-samples 3 -f a1 a2 a3 --epochs-few-shot 1 --meta-training-task-numbers 5
 
 if __name__ == '__main__':
-    
-    # args.active_learning = ['a0']
-    # #args.baseline = ['a0']
-    # args.epochs_active_learning = 3
-    # args.epochs_baseline = 1
-    # args.shots = 3
-    # args.clip_length = 3
-    # args.batch_size=16
-    # args.loops = 1
-    # args.num_samples = 1
 
     b_models=[]
     a_models=[]
@@ -92,6 +86,8 @@ if __name__ == '__main__':
                     num_classes=len(Utils.LABEL_NAMES),
                     batch_size=args.batch_size, 
                     frame_step=int(Utils.FPS/Utils.MOVINET_PARAMS[b_id][1]),
+                    train_backbone=args.train_backbone,
+                    regularization=args.regularization,
                     output_signature=Utils.OUTPUT_SIGNATURE,
                     label_names=Utils.LABEL_NAMES) 
         for b_id in args.baseline]
@@ -108,6 +104,8 @@ if __name__ == '__main__':
                     num_classes=len(Utils.LABEL_NAMES),
                     batch_size=args.batch_size, 
                     frame_step=int(Utils.FPS/Utils.MOVINET_PARAMS[a_id][1]),
+                    train_backbone=args.train_backbone,
+                    regularization=args.regularization,
                     output_signature=Utils.OUTPUT_SIGNATURE,
                     label_names=Utils.LABEL_NAMES) 
         for a_id in args.active_learning]
@@ -123,6 +121,8 @@ if __name__ == '__main__':
                     num_classes=len(Utils.LABEL_NAMES),
                     batch_size=args.batch_size,
                     frame_step=int(Utils.FPS/Utils.MOVINET_PARAMS[f_id][1]),
+                    train_backbone=args.train_backbone,
+                    regularization=args.regularization,
                     output_signature=Utils.OUTPUT_SIGNATURE,
                     label_names=Utils.LABEL_NAMES) 
         for f_id in args.few_shot_learning]
