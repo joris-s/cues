@@ -13,10 +13,12 @@ import seaborn as sns
 import tensorflow as tf
 from sklearn.manifold import TSNE
 from sklearn.metrics import confusion_matrix
+from sklearn.model_selection import train_test_split
+from sklearn_genetic import GASearchCV
 
 # Set font parameters for Matplotlib
 plt.rc('font', family='serif')
-plt.rcParams.update({'font.size': 12})
+plt.rcParams.update({'font.size': 14})
 
 # Import the MoViNet model from TensorFlow Models (tf-models-official) for the MoViNet model
 from official.projects.movinet.modeling import movinet
@@ -391,13 +393,13 @@ def cm_heatmap(actual, predicted, labels, savefigs=False, name='heatmap'):
         row = cm_num[i]
         cm.append([(round(x/sum(row), 2)) for x in row])
     
-    fig, (ax2, ax1) = plt.subplots(1, 2, figsize=(30, 15))
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 30))
     
     # Plot the normalized confusion matrix
     heatmap1 = sns.heatmap(cm, annot=True, cbar=False, cmap='BuPu', vmin=0.00, vmax=1.00, ax=ax1, square=True)
-    ax1.set_title('Normalized Confusion Matrix', fontsize=16)
-    ax1.set_xlabel('Predicted Action')
-    ax1.set_ylabel('Actual Action')
+    ax1.set_title('Normalized Confusion Matrix', fontsize=20)
+    ax1.set_xlabel('Predicted Action', fontsize=16)
+    ax1.set_ylabel('Actual Action', fontsize=16)
     ax1.xaxis.tick_bottom()
     plt.setp(ax1.get_xticklabels(), rotation=90)
     plt.setp(ax1.get_yticklabels(), rotation=0)
@@ -412,9 +414,9 @@ def cm_heatmap(actual, predicted, labels, savefigs=False, name='heatmap'):
     # Plot the original confusion matrix with integer values
     #heatmap2 = sns.heatmap(cm_num, annot=True, cbar=False, cmap=ListedColormap(['white']), fmt='d', ax=ax2)
     heatmap2 = sns.heatmap(cm, annot=True, cbar=False, cmap='BuPu', vmin=0.00, vmax=1.00, ax=ax2, square=True)
-    ax2.set_title('Confusion Matrix with Frequency Values', fontsize=16)
-    ax2.set_xlabel('Predicted Action')
-    ax2.set_ylabel('Actual Action')
+    ax2.set_title('Confusion Matrix with Frequency Values', fontsize=20)
+    ax2.set_xlabel('Predicted Action', fontsize=16)
+    ax2.set_ylabel('Actual Action', fontsize=16)
     ax2.xaxis.tick_bottom()
     plt.setp(ax2.get_xticklabels(), rotation=90)
     plt.setp(ax2.get_yticklabels(), rotation=0)
@@ -552,7 +554,7 @@ def plot_all_tsne(model):
     labels = np.array([l for _, l, _ in data])
 
     # Get the penultimate layer of the model in batches
-    batch_size = 4
+    batch_size = 16
     penultimate_features = []
     for i, batch_vids in enumerate(batch_processing(vids, batch_size)):
         print(f"Processing batch {i + 1}")
@@ -563,7 +565,7 @@ def plot_all_tsne(model):
     print("Penultimate features obtained")
 
     # Compute t-SNE representation for all the data at once
-    tsne = TSNE(n_components=2, random_state=42)
+    tsne = TSNE(n_components=2, random_state=42, n_iter=5000)
     tsne_representation = tsne.fit_transform(penultimate_features)
     print("t-SNE representation computed")
 

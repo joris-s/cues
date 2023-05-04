@@ -54,7 +54,7 @@ class BaselineModel:
         self.regularization = regularization
         self.output_signature = output_signature
     
-    def train(self):
+    def train(self, learning_rate=1e-3):
         ph = {m.name: [] for m in Utils.METRICS}
         performance_history = {'loss': [], 'val_loss': []}
         
@@ -63,7 +63,7 @@ class BaselineModel:
             performance_history[f'val_{metric_name}'] = []        
             
         loss_obj = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-        optimizer = tf.keras.optimizers.Adam(0.001)
+        optimizer = tf.keras.optimizers.Adam(learning_rate)
 
         early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=3)
         model_checkpoint = tf.keras.callbacks.ModelCheckpoint(filepath=self.checkpoint_dir+self.weights_file, 
@@ -105,7 +105,8 @@ class BaselineModel:
         
         with open(f'metrics/Metrics {self.name} for {self.model_id.upper()}.txt', 'a') as f:
             f.write(f"\nacc={acc}, balanced_acc={balanced_acc}, precision={precision}, recall={recall}, f1={f1}")
-            
+
+        return balanced_acc
         
     def predict(self, ds):
         labels = self.base_model.predict(ds)

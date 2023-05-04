@@ -92,6 +92,23 @@ if __name__ == '__main__':
                     label_names=Utils.LABEL_NAMES) 
         for b_id in args.baseline]
     
+    if args.few_shot_learning:
+        f_models = [FewShotModel(
+                    tasks=args.meta_tasks, meta_classes=Utils.META_CLASSES,
+                    model_id=f_id, model_type="base", 
+                    epochs=args.epochs_few_shot, shots=args.shots, 
+                    dropout=args.drop_out, 
+                    resolution=Utils.MOVINET_PARAMS[f_id][0], 
+                    num_frames=int(2*np.floor(Utils.MOVINET_PARAMS[f_id][1]*args.clip_length/2)), 
+                    num_classes=len(Utils.LABEL_NAMES),
+                    batch_size=args.batch_size,
+                    frame_step=int(Utils.FPS/Utils.MOVINET_PARAMS[f_id][1]),
+                    train_backbone=args.train_backbone,
+                    regularization=args.regularization,
+                    output_signature=Utils.OUTPUT_SIGNATURE,
+                    label_names=Utils.LABEL_NAMES) 
+        for f_id in args.few_shot_learning]
+
     if args.active_learning:
         a_models = [ActiveLearningModel(
                     num_loops=args.loops, num_samples=args.num_samples,
@@ -110,24 +127,9 @@ if __name__ == '__main__':
                     label_names=Utils.LABEL_NAMES) 
         for a_id in args.active_learning]
     
-    if args.few_shot_learning:
-        f_models = [FewShotModel(
-                    tasks=args.meta_tasks, meta_classes=Utils.META_CLASSES,
-                    model_id=f_id, model_type="base", 
-                    epochs=args.epochs_few_shot, shots=args.shots, 
-                    dropout=args.drop_out, 
-                    resolution=Utils.MOVINET_PARAMS[f_id][0], 
-                    num_frames=int(2*np.floor(Utils.MOVINET_PARAMS[f_id][1]*args.clip_length/2)), 
-                    num_classes=len(Utils.LABEL_NAMES),
-                    batch_size=args.batch_size,
-                    frame_step=int(Utils.FPS/Utils.MOVINET_PARAMS[f_id][1]),
-                    train_backbone=args.train_backbone,
-                    regularization=args.regularization,
-                    output_signature=Utils.OUTPUT_SIGNATURE,
-                    label_names=Utils.LABEL_NAMES) 
-        for f_id in args.few_shot_learning]
+
     
-    models = b_models + a_models + f_models
+    models = b_models + f_models + a_models
     
     for model in models:
         
