@@ -68,8 +68,6 @@ print(f"drop-out: {args.drop_out}")
 print(f"regularization: {args.regularization}")
 print("----------")
 
-#python Main.py -b a0 a1 a2 a3 a4 a5 -a a3 --epochs-active-learning 5 --loops 1 --num-samples 3 -f a1 a2 a3 --epochs-few-shot 1 --meta-training-task-numbers 5
-
 if __name__ == '__main__':
 
     b_models=[]
@@ -152,6 +150,3 @@ if __name__ == '__main__':
             model.load_best_weights()
         model.test()
         model.plot_confusion_matrix()
-
-        if (model.model_id == 'a2') and (model.name =='Baseline'):
-            Utils.plot_all_tsne(model)
