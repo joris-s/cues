@@ -115,7 +115,7 @@ class BaselineModel:
     def load_best_weights(self):
         self.base_model.load_weights(self.checkpoint_dir+self.weights_file)
     
-    def init_base_model(self):
+    def init_base_model(self, causal=False):
         self.base_model = Utils.AIPCreateBackboneAndClassifierModel(model_id=self.model_id, 
                                                          num_classes=self.num_classes, 
                                                          frames_number=self.num_frames, 
@@ -125,6 +125,7 @@ class BaselineModel:
                                                          dropout=self.dropout,
                                                          checkpoint_dir=self.checkpoint_dir,
                                                          regularization=self.regularization,
+                                                         causal_conv=causal,
                                                          stream_mode=False)
     
     def init_streaming_model(self):

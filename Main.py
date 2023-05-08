@@ -30,6 +30,7 @@ parser.add_argument('--num-samples', '-ns', type=int, default=3, metavar='N', he
 # Add an option for disabling training and loading possible weights instead
 parser.add_argument('--no-training', '-nt', action='store_true', help='Disable training and just load possible weights instead')
 parser.add_argument('--train-backbone', '-tb', action='store_true', help='Train the MoViNet backbone as well as classification head')
+parser.add_argument('--causal-conv', '-cc', action='store_true', help='Enable causal convolutions')
 
 # Add an option for data batch size
 parser.add_argument('--batch-size', '-bs', type=int, default=16, metavar='N', help='Batch size of datasets for training and testing (default: 16)')
@@ -48,19 +49,17 @@ print(f"few-shot-learning models: {args.few_shot_learning}")
 print(f"active-learning models: {args.active_learning}")
 print(f"baseline models: {args.baseline}")
 print()
-print(f"epochs for few-shot-learning: {args.epochs_few_shot}")
-print(f"epochs for active-learning: {args.epochs_active_learning}")
-print(f"epochs for baseline: {args.epochs_baseline}")
-print()
 print(f"meta-training task numbers: {args.meta_tasks}")
 print(f"shots:          {args.shots}")
 print()
 print(f"loops:          {args.loops}")
 print(f"num-samples:    {args.num_samples}")
 print()
-print(f'epochs:         {args.epochs}')
 print(f"train-backbone: {args.train_backbone}")
 print(f"no-training:    {args.no_training}")
+print(f'causal-conv:    {args.causal_conv}')
+print()
+print(f'epochs:         {args.epochs}')
 print(f"batch-size:     {args.batch_size}")
 print(f"clip-length:    {args.clip_length}")
 print(f"drop-out:       {args.drop_out}")
@@ -137,9 +136,9 @@ if __name__ == '__main__':
         if model.name == 'FSL':
             model.init_meta_data('.avi', Utils.META_TRAIN_FOLDER, Utils.META_VAL_FOLDER)
         
-        model.init_base_model()
+        model.init_base_model(causal=args.causal_conv)
         if not args.no_training:
-            model.train()
+            model.train(args.learning_rate)
             model.plot_train_val()
         try:
             model.load_best_weights()

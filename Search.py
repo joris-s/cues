@@ -49,12 +49,12 @@ class GeneticSearchBaseline():
         model.init_data('.mp4', Utils.TRAIN_FOLDER, Utils.VAL_FOLDER, Utils.TEST_FOLDER)
         if model.name == 'FSL':
             model.init_meta_data('.avi', Utils.META_TRAIN_FOLDER, Utils.META_VAL_FOLDER)
-        model.init_base_model()
+        model.init_base_model(params['causal_conv'])
         
         model.train(params['learning_rate'])
 
         # Evaluate the model on the validation data
-        test = Utils.remove_paths(model.val_ds)
+        test = Utils.remove_paths(model.test_ds)
         actual, predicted = Utils.get_actual_predicted_labels(test, model.base_model)
         accuracy = balanced_accuracy_score(actual, predicted)
 
@@ -141,7 +141,8 @@ if __name__ == '__main__':
         'learning_rate': [1e-4, 1e-3, 1e-2],
         'batch_size': [4, 8],
         'dropout': [0.0, 0.1, 0.2, 0.3, 0.4, 0.5],
-        'clip_length': [3, 5]
+        'clip_length': [3, 5],
+        'causal_conv': [True, False]
     }
     search_space_fsl = {
         'train_backbone': [True, False],
@@ -154,7 +155,9 @@ if __name__ == '__main__':
         'shots': [3, 5, 10]
     }
     
-    gsb = GeneticSearchBaseline(search_space_baseline, n_gen=20, n_pop=2)
+    gsb = GeneticSearchBaseline(search_space_baseline, n_gen=5, n_pop=6)
     gsfsl = GeneticSearchFSL(search_space_fsl, n_gen=5, n_pop=6)
     
     gsfsl.run()
+    gsb.run()
+    
