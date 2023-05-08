@@ -315,7 +315,7 @@ def get_class_weights(ds):
     class_weights = {i: 1/(labels.count(i)/total_labels) for i in range(len(list(set(labels))))}
     class_weight_sum = sum(class_weights.values())
     class_weights = {k: v/class_weight_sum for k, v in class_weights.items()}
-    return class_weights#scale_class_weights(class_weights, target_loss=2.5, current_loss=0.05, num_classes=len(LABEL_NAMES))
+    return scale_class_weights(class_weights, target_loss=2.5, current_loss=0.07, num_classes=len(LABEL_NAMES))
 
 def create_data_splits(train_ratio=0.7, val_ratio=0.2, test_ratio=0.1, split_file='data/slapi/SPLIT', include_file='data/slapi/INCLUDE'):
     # Read the INCLUDE file and create a set of video codes to be included

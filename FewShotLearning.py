@@ -41,7 +41,7 @@ class FewShotModel(BaselineModel):
                                                              output_signature = self.output_signature)
             self.meta_val_ds = meta_val_ds.batch(self.batch_size)
         
-    def train(self):
+    def train(self, learning_rate=1e-3):
         ph = {m.name: [] for m in Utils.METRICS}
         performance_history = {'loss': [], 'val_loss': []}
         
@@ -78,7 +78,7 @@ class FewShotModel(BaselineModel):
             
         train, val = Utils.remove_paths(self.train_ds), Utils.remove_paths(self.val_ds)
             
-        self.base_model.optimizer.lr = 0.001
+        self.base_model.optimizer.lr = learning_rate
         results = self.base_model.fit(train,
                                       validation_data=val,
                                       epochs=self.epochs,

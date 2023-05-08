@@ -17,6 +17,7 @@ class GeneticSearchBaseline():
         self.search_space = search_space
         self.n_gen = n_gen
         self.n_pop = n_pop
+        self.name = "Baseline"
 
     def random_indices(self):
         return [np.random.randint(len(self.search_space[key])) for key in self.search_space.keys()]
@@ -108,13 +109,14 @@ class GeneticSearchBaseline():
             'logbook': logbook.__dict__,
         }
         print(results)
-        with open(f'genetic_algorithm_baseline_{N_POP}_{N_GEN}.json', 'w') as outfile:
+        with open(f'genetic_algorithm_{self.name}_{self.n_pop}_{self.n_gen}.json', 'w') as outfile:
             json.dump(results, outfile)
 
 class GeneticSearchFSL(GeneticSearchBaseline):
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.name = "FSL"
         
     def init_model(self, params):
         return FewShotModel(
@@ -152,7 +154,7 @@ if __name__ == '__main__':
         'shots': [3, 5, 10]
     }
     
-    gsb = GeneticSearchBaseline(search_space_baseline, 1, 1)
-    gsfsl = GeneticSearchFSL(search_space_fsl, 1, 1)
+    gsb = GeneticSearchBaseline(search_space_baseline, n_gen=20, n_pop=2)
+    gsfsl = GeneticSearchFSL(search_space_fsl, n_gen=5, n_pop=6)
     
-    gsb.run()
+    gsfsl.run()
