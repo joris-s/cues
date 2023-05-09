@@ -443,7 +443,7 @@ def cm_heatmap(actual, predicted, labels, savefigs=False, name='heatmap'):
     plt.tight_layout()
     
     if savefigs:
-        plt.savefig('figs/cm/'+name+'.png', bbox_inches='tight', dpi=100)
+        plt.savefig('figs/cm/'+name+'.png', bbox_inches='tight', dpi=1000)
     plt.close()    
     plt.clf()
 
@@ -479,8 +479,6 @@ def plot_metrics(history, metrics, title, savefigs=True):
 
         if metric != 'loss' and not metric.startswith('train_loss'):
             axes[row, col].set_ylim([0, 1.1])
-        else:
-            axes[row, col].set_ylim([0, 20])
 
         axes[row, col].legend(loc='best')
 
@@ -491,7 +489,7 @@ def plot_metrics(history, metrics, title, savefigs=True):
     fig.tight_layout(rect=[0, 0, 1, 0.96])
     
     if savefigs:
-        plt.savefig(f'figs/metrics/{title}.png', dpi=100)
+        plt.savefig(f'figs/metrics/{title}.png', dpi=1000)
     plt.close()
     plt.clf()
 
@@ -541,7 +539,7 @@ def plot_tsne(tsne_representation, labels, indices, savefigs=True, name='', x_li
     if not os.path.exists('figs/'):
         os.makedirs('figs/')
 
-    plt.savefig(os.path.join('figs/tsne/', f'{name}.png'), dpi=100, bbox_inches='tight')
+    plt.savefig(os.path.join('figs/tsne/', f'{name}.png'), dpi=1000, bbox_inches='tight')
     plt.close()
     
     return x_lim, y_lim

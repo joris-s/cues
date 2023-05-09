@@ -1,10 +1,11 @@
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
 import numpy as np
 from sklearn.metrics import balanced_accuracy_score
 from deap import base, creator, tools, algorithms
 import json
 from tensorflow.keras import backend as K
-import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 from Baseline import BaselineModel
 from FewShotLearning import FewShotModel
@@ -24,6 +25,19 @@ class GeneticSearchBaseline():
 
     def get_fitness_values(self, ind):
         return ind.fitness.values
+    
+    def wipe_and_create_file(self, file_path):
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        with open(file_path, 'w') as f:
+            json.dump([], f)
+        
+    def append_best_hyperparameters(self, file_path, best_hyperparameters):
+        with open(file_path, 'r') as f:
+            data = json.load(f)
+        data.append(best_hyperparameters)
+        with open(file_path, 'w') as f:
+            json.dump(data, f)
     
     def init_model(self, params):
         return BaselineModel(
@@ -64,6 +78,9 @@ class GeneticSearchBaseline():
         return -accuracy,
 
     def run(self):
+        file_path = f'best_hyperparameters_{self.name}_{self.n_pop}_{self.n_gen}.json'
+        self.wipe_and_create_file(file_path)
+
         creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
         creator.create("Individual", list, fitness=creator.FitnessMin)
 
@@ -103,14 +120,8 @@ class GeneticSearchBaseline():
 
             # Print the logbook for this generation
             print(f"Generation {gen+1}, Logbook: {logbook}")
-        
-        results = {
-            'best_hyperparameters': best_hyperparameters,
-            'logbook': logbook.__dict__,
-        }
-        print(results)
-        with open(f'genetic_algorithm_{self.name}_{self.n_pop}_{self.n_gen}.json', 'w') as outfile:
-            json.dump(results, outfile)
+            
+            self.append_best_hyperparameters(file_path, best_hyperparameters)
 
 class GeneticSearchFSL(GeneticSearchBaseline):
     
@@ -152,12 +163,12 @@ if __name__ == '__main__':
         'dropout': [0.0, 0.1, 0.2, 0.3, 0.4, 0.5],
         'clip_length': [3, 5],
         'meta_tasks': [5, 10, 15],
-        'shots': [3, 5, 10]
+        'shots': [3, 5, 10],
+        'causal_conv': [True, False]
     }
     
-    gsb = GeneticSearchBaseline(search_space_baseline, n_gen=5, n_pop=6)
+    gsb = GeneticSearchBaseline(search_space_baseline, n_gen=1, n_pop=1)
     gsfsl = GeneticSearchFSL(search_space_fsl, n_gen=5, n_pop=6)
     
-    gsfsl.run()
     gsb.run()
     

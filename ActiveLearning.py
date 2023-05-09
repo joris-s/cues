@@ -240,7 +240,7 @@ class ActiveLearningModel(BaselineModel):
     
         return labeled_ds, unlabeled_ds
     
-    def train(self):
+    def train(self, learning_rate=1e-3, epochs=5):
         ph = {m.name: [] for m in Utils.METRICS}
         performance_history = {'loss': [], 'val_loss': []}
         
@@ -253,7 +253,7 @@ class ActiveLearningModel(BaselineModel):
                                                               monitor='val_loss', save_weights_only=True, save_best_only=True)
 
         loss_obj = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-        optimizer = tf.keras.optimizers.Adam()
+        optimizer = tf.keras.optimizers.Adam(learning_rate)
         self.base_model.compile(loss=loss_obj, optimizer=optimizer, metrics=Utils.METRICS)
 
         for i in range(self.num_loops):
@@ -261,7 +261,7 @@ class ActiveLearningModel(BaselineModel):
 
             results = self.base_model.fit(train,
                                 validation_data=val,
-                                epochs=self.epochs,
+                                epochs=epochs,
                                 callbacks=[model_checkpoint, early_stopping],
                                 validation_freq=1,
                                 class_weight=Utils.get_class_weights(train),
@@ -295,7 +295,7 @@ class ActiveLearningModel(BaselineModel):
         self.base_model.load_weights(self.checkpoint_dir + self.weights_file)
         results = self.base_model.fit(train,
                             validation_data=val,
-                            epochs=5,
+                            epochs=epochs,
                             callbacks=[model_checkpoint, early_stopping],
                             validation_freq=1,
                             class_weight=Utils.get_class_weights(train),

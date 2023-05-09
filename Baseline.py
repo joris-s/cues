@@ -33,7 +33,7 @@ class BaselineModel:
     
     history: dict
     
-    def __init__(self, model_id, model_type, epochs, shots, dropout,
+    def __init__(self, model_id, model_type, shots, dropout,
                  resolution, num_frames, num_classes, label_names, batch_size, 
                  frame_step, train_backbone, regularization, output_signature):
         self.name = "Baseline"
@@ -41,7 +41,6 @@ class BaselineModel:
         self.model_type = model_type
         self.checkpoint_dir = f'MoViNets/movinet_{model_id}_{model_type}'
         self.weights_file = f'/movinet_{self.name}_{model_id}_{model_type}_weights.hdf5'
-        self.epochs = epochs
         self.resolution = resolution
         self.num_frames = num_frames
         self.num_classes = num_classes
@@ -54,7 +53,7 @@ class BaselineModel:
         self.regularization = regularization
         self.output_signature = output_signature
     
-    def train(self, learning_rate=1e-3):
+    def train(self, learning_rate=1e-3, epochs=5):
         ph = {m.name: [] for m in Utils.METRICS}
         performance_history = {'loss': [], 'val_loss': []}
         
@@ -74,7 +73,7 @@ class BaselineModel:
         self.base_model.compile(loss=loss_obj, optimizer=optimizer, metrics=Utils.METRICS)
         results = self.base_model.fit(train,
                             validation_data=val,
-                            epochs=self.epochs,
+                            epochs=epochs,
                             callbacks=[model_checkpoint, early_stopping],
                             validation_freq=1,
                             class_weight=Utils.get_class_weights(train),
@@ -128,7 +127,7 @@ class BaselineModel:
                                                          causal_conv=causal,
                                                          stream_mode=False)
     
-    def init_streaming_model(self):
+    def init_stream_model(self, causal=True):
         self.stream_model = Utils.AIPCreateBackboneAndClassifierModel(model_id=self.model_id, 
                                                          num_classes=self.num_classes, 
                                                          frames_number=self.num_frames, 
@@ -138,6 +137,7 @@ class BaselineModel:
                                                          dropout=self.dropout,
                                                          checkpoint_dir=self.checkpoint_dir,
                                                          regularization=self.regularization,
+                                                         causal_conv=causal,
                                                          stream_mode=True)
 
         self.stream_model.set_weights(self.base_model.get_weights())

@@ -76,8 +76,7 @@ if __name__ == '__main__':
     if args.baseline:
         b_models = [BaselineModel(
                     model_id=b_id, model_type="base", 
-                    epochs=args.epochs, shots=args.shots, 
-                    dropout=args.drop_out, 
+                    shots=args.shots, dropout=args.drop_out, 
                     resolution=Utils.MOVINET_PARAMS[b_id][0], 
                     num_frames=int(2*np.floor(Utils.MOVINET_PARAMS[b_id][1]*args.clip_length/2)), 
                     num_classes=len(Utils.LABEL_NAMES),
@@ -92,8 +91,7 @@ if __name__ == '__main__':
     if args.few_shot_learning:
         f_models = [FewShotModel(
                     tasks=args.meta_tasks, meta_classes=Utils.META_CLASSES,
-                    model_id=f_id, model_type="base", 
-                    epochs=args.epochs, shots=args.shots, 
+                    model_id=f_id, model_type="base", shots=args.shots, 
                     dropout=args.drop_out, 
                     resolution=Utils.MOVINET_PARAMS[f_id][0], 
                     num_frames=int(2*np.floor(Utils.MOVINET_PARAMS[f_id][1]*args.clip_length/2)), 
@@ -110,8 +108,7 @@ if __name__ == '__main__':
         a_models = [ActiveLearningModel(
                     num_loops=args.loops, num_samples=args.num_samples,
                     data_path=Utils.UNLABELED_FOLDER,
-                    model_id=a_id, model_type="base", 
-                    epochs=args.epochs, shots=args.shots, 
+                    model_id=a_id, model_type="base", shots=args.shots, 
                     dropout=args.drop_out, 
                     resolution=Utils.MOVINET_PARAMS[a_id][0], 
                     num_frames=int(2*np.floor(Utils.MOVINET_PARAMS[a_id][1]*args.clip_length/2)), 
@@ -124,10 +121,7 @@ if __name__ == '__main__':
                     label_names=Utils.LABEL_NAMES) 
         for a_id in args.active_learning]
     
-
-    
     models = b_models + f_models + a_models
-    
     for model in models:
         
         print(f'Starting on {model.model_id} model of type {model.name}')
@@ -138,13 +132,13 @@ if __name__ == '__main__':
         
         model.init_base_model(causal=args.causal_conv)
         if not args.no_training:
-            model.train(args.learning_rate)
+            model.train(args.learning_rate, args.epochs)
             model.plot_train_val()
         try:
             model.load_best_weights()
         except FileNotFoundError:
             print('Weights not found, training instead.')
-            model.train(args.learning_rate)
+            model.train(args.learning_rate, args.epochs)
             model.plot_train_val()
             model.load_best_weights()
         model.test()
