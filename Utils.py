@@ -72,7 +72,7 @@ if (os.name == 'nt') == False:
     TEST_FOLDER = 'data/slapi/test'
     META_TRAIN_FOLDER = 'data/UCF-101/train'
     META_VAL_FOLDER = 'data/UCF-101/val'
-    AL_FOLDER = 'data/slapi/active-learning'
+    AL_FOLDER = 'data/slapi/labeled/active-learning'
 
 LABEL_NAMES = sorted(os.listdir(TRAIN_FOLDER))
 
@@ -315,7 +315,7 @@ def get_class_weights(ds):
     class_weights = {i: 1/(labels.count(i)/total_labels) for i in range(len(list(set(labels))))}
     class_weight_sum = sum(class_weights.values())
     class_weights = {k: v/class_weight_sum for k, v in class_weights.items()}
-    return scale_class_weights(class_weights, target_loss=2.5, current_loss=0.07, num_classes=len(LABEL_NAMES))
+    return class_weights
 
 def create_data_splits(train_ratio=0.7, val_ratio=0.2, test_ratio=0.1, split_file='data/slapi/SPLIT', include_file='data/slapi/INCLUDE'):
     # Read the INCLUDE file and create a set of video codes to be included
@@ -516,14 +516,16 @@ def count_elements_in_dataset(dataset):
 def plot_tsne(tsne_representation, labels, indices, savefigs=True, name='', x_lim=None, y_lim=None):
     num_classes = len(np.unique(labels))
     colors = plt.cm.tab20b(np.linspace(0, 1, num_classes))
-    markers = ['>','s','+','2','d','h', 'o','4',',','v','H','1','*','3','^','<','.','_','x','8','p','D']
-
+    markers = ['s', '>', 'D', 'X', 'v', 'H', 
+               '^', '2', '_', '1', 'x', 'p', 
+               '+', 'o', 'h', 'P', '3', '*', 
+               'd', ',', '4', '.', '<', '|']
     plt.figure(figsize=(12, 8))
     unique_labels = np.unique(labels)
     for label, color, marker in zip(unique_labels, colors, markers[:num_classes]):
         label_indices = np.where(labels == label)
         plot_indices = np.intersect1d(label_indices, indices)
-        plt.scatter(tsne_representation[plot_indices, 0], tsne_representation[plot_indices, 1], label=LABEL_NAMES[label], c=[color], marker=marker, alpha=1, s=150)
+        plt.scatter(tsne_representation[plot_indices, 0], tsne_representation[plot_indices, 1], label=LABEL_NAMES[label], c=[color], marker=marker, alpha=0.7, s=150)
 
     plt.gca().spines['top'].set_visible(False)
     plt.gca().spines['right'].set_visible(False)
@@ -563,7 +565,7 @@ def plot_all_tsne(model):
     print("Penultimate features obtained")
 
     # Compute t-SNE representation for all the data at once
-    tsne = TSNE(n_components=2, random_state=42, n_iter=5000)
+    tsne = TSNE(n_components=2, random_state=42)
     tsne_representation = tsne.fit_transform(penultimate_features)
     print("t-SNE representation computed")
 
