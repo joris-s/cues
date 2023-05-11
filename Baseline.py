@@ -4,6 +4,7 @@ from pathlib import Path
 from sklearn.metrics import accuracy_score, balanced_accuracy_score, precision_score, recall_score, f1_score
 import os
 import json
+import numpy as np
 
 
 class BaselineModel:
@@ -105,7 +106,27 @@ class BaselineModel:
         with open(f'metrics/Metrics {self.name} for {self.model_id.upper()}.txt', 'a') as f:
             f.write(f"\nacc={acc}, balanced_acc={balanced_acc}, precision={precision}, recall={recall}, f1={f1}")
 
+        self.test_per_class()
+        
         return balanced_acc
+    
+    def test_per_class(self):
+        print(f"{'Class':<20}{'Test samples':<15}{'Accuracy':<12}{'Precision':<12}{'Recall':<12}{'F1':<12}")
+        print('-' * 83)
+
+        for idx, label in enumerate(self.label_names):
+            actual_class_indices = np.where(np.array(self.actual) == idx)
+            actual_class = np.array(self.actual)[actual_class_indices]
+            predicted_class = np.array(self.predicted)[actual_class_indices]
+            test_samples = np.sum(actual_class)
+            accuracy = accuracy_score(actual_class, predicted_class)
+            precision = precision_score(actual_class, predicted_class, labels=[idx], average=None, zero_division=0)[0]
+            recall = recall_score(actual_class, predicted_class, labels=[idx], average=None, zero_division=0)[0]
+            f1 = f1_score(actual_class, predicted_class, labels=[idx], average=None, zero_division=0)[0]
+
+            print(f"{label:<20}, tst={test_samples}, acc={accuracy}, prc={precision}, rcl={recall}, f1={f1}")
+            with open(f'metrics/Metrics {self.name} for {self.model_id.upper()}.txt', 'a') as f:
+                f.write(f"\n{label:<20}, tst={test_samples}, acc={accuracy}, prc={precision}, rcl={recall}, f1={f1}")
         
     def predict(self, ds):
         labels = self.base_model.predict(ds)
