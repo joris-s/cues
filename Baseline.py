@@ -1,7 +1,7 @@
 import tensorflow as tf
 import Utils
 from pathlib import Path
-from sklearn.metrics import accuracy_score, balanced_accuracy_score, precision_score, recall_score, f1_score
+from sklearn.metrics import accuracy_score, balanced_accuracy_score, precision_score, recall_score, f1_score, classification_report
 import os
 import json
 import numpy as np
@@ -102,11 +102,13 @@ class BaselineModel:
         precision = precision_score(self.actual, self.predicted, average='weighted', zero_division=0)
         recall = recall_score(self.actual, self.predicted, average='weighted')
         f1 = f1_score(self.actual, self.predicted, average='weighted')
+        report = classification_report(self.actual, self.predicted, target_names=self.label_names, zero_division=0)
         
         with open(f'metrics/Metrics {self.name} for {self.model_id.upper()}.txt', 'a') as f:
             f.write(f"\nacc={acc}, balanced_acc={balanced_acc}, precision={precision}, recall={recall}, f1={f1}")
+            f.write(f"\n\n{report}")
 
-        self.test_per_class()
+        #self.test_per_class()
         
         return balanced_acc
     
