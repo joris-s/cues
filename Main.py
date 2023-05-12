@@ -38,7 +38,8 @@ parser.add_argument('--clip-length', '-cl', type=int, default=3, metavar='N', he
 parser.add_argument('--drop-out', '-do', type=float, default=0.5, metavar='P', help='Floating-point dropout probability (default: 0.5)')
 parser.add_argument('--regularization', '-rg', type=str, default=None, metavar='TYPE', help='Type of regularization for the model (options: "l1", "l2", etc., default: None)')
 parser.add_argument('--learning-rate', '-lr', type=float, default=1e-3, metavar='P', help='Floating-point learning rate (default 1e-3)')
-
+parser.add_argument('--ablation-version', '-av', type=str, default="", metavar='TYPE', help="version to be appended to filenames")
+parser.add_argument('--optical-flow', '-of', action='store_true', help='Use optical flow preprocessing')
 # Parse the arguments
 args = parser.parse_args()
 
@@ -73,6 +74,9 @@ if __name__ == '__main__':
     a_models=[]
     f_models=[]
     
+    if args.optical_flow:
+        Utils.frames_from_video_file = Utils.frames_from_video_of
+    
     if args.baseline:
         b_models = [BaselineModel(
                     model_id=b_id, model_type="base", 
@@ -85,7 +89,8 @@ if __name__ == '__main__':
                     train_backbone=args.train_backbone,
                     regularization=args.regularization,
                     output_signature=Utils.OUTPUT_SIGNATURE,
-                    label_names=Utils.LABEL_NAMES) 
+                    label_names=Utils.LABEL_NAMES,
+                    version=args.ablation_version) 
         for b_id in args.baseline]
     
     if args.few_shot_learning:
@@ -101,7 +106,8 @@ if __name__ == '__main__':
                     train_backbone=args.train_backbone,
                     regularization=args.regularization,
                     output_signature=Utils.OUTPUT_SIGNATURE,
-                    label_names=Utils.LABEL_NAMES) 
+                    label_names=Utils.LABEL_NAMES,
+                    version=args.ablation_version) 
         for f_id in args.few_shot_learning]
 
     if args.active_learning:
@@ -118,7 +124,8 @@ if __name__ == '__main__':
                     train_backbone=args.train_backbone,
                     regularization=args.regularization,
                     output_signature=Utils.OUTPUT_SIGNATURE,
-                    label_names=Utils.LABEL_NAMES) 
+                    label_names=Utils.LABEL_NAMES,
+                    version=args.ablation_version) 
         for a_id in args.active_learning]
     
     models = b_models + f_models + a_models

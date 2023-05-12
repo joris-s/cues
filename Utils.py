@@ -163,6 +163,49 @@ def frames_from_video_file(video_path, n_frames, output_size, frame_step=15):
 
     return result
 
+def frames_from_video_of(video_path, n_frames, output_size, frame_step=15):
+    result = []
+    src = cv2.VideoCapture(str(video_path))
+
+    if not src.isOpened():
+        print(f"Error: Could not open the video file {video_path}.")
+        return result
+
+    video_length = int(src.get(cv2.CAP_PROP_FRAME_COUNT))
+    frame_step = int(video_length / n_frames)
+
+    need_length = 1 + (n_frames - 1) * frame_step
+
+    if need_length > video_length:
+        start = 0
+    else:
+        max_start = video_length - need_length
+        start = random.randint(0, max_start + 1)
+
+    src.set(cv2.CAP_PROP_POS_FRAMES, start)
+    ret, frame = src.read()
+    prev_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+    for _ in range(n_frames):
+        for _ in range(frame_step-1):
+            ret, frame = src.read()
+        if ret:
+            gray = cv2.cvtColor(np.array(frame), cv2.COLOR_BGR2GRAY)
+            flow = cv2.calcOpticalFlowFarneback(prev_gray, gray, None, 0.5, 3, 15, 3, 5, 1.2, 0)
+            prev_gray =gray.copy()
+            flow[..., 0] = cv2.normalize(flow[..., 0], None, 0, 255, cv2.NORM_MINMAX)
+            flow[..., 1] = cv2.normalize(flow[..., 1], None, 0, 255, cv2.NORM_MINMAX)
+            gray = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX)
+            frame = np.stack([flow[..., 0], flow[..., 1], gray], axis=2)
+            frame = format_frames(frame, output_size)
+            result.append(frame)
+        else:
+            result.append(np.zeros((*output_size, 3)))
+    src.release()
+
+    return np.array(result)
+
+
 def filter_examples_per_class(examples_list, max_examples_per_class):
     num_examples_per_class = {}
     filtered_list = []
@@ -317,7 +360,7 @@ def get_class_weights(ds):
     class_weights = {k: v/class_weight_sum for k, v in class_weights.items()}
     return class_weights
 
-def create_data_splits(train_ratio=0.7, val_ratio=0.2, test_ratio=0.1, split_file='data/slapi/SPLIT', include_file='data/slapi/INCLUDE'):
+def create_data_splits(train_ratio=0.6, val_ratio=0.2, test_ratio=0.2, split_file='data/slapi/SPLIT', include_file='data/slapi/INCLUDE'):
     # Read the INCLUDE file and create a set of video codes to be included
     with open(include_file, 'r') as f:
         included_video_codes = set(line.strip() for line in f.readlines())

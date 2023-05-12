@@ -34,18 +34,19 @@ class BaselineModel:
     
     history: dict
     
-    def __init__(self, model_id, model_type, shots, dropout,
-                 resolution, num_frames, num_classes, label_names, batch_size, 
+    def __init__(self, model_id, model_type, shots, dropout, resolution, 
+                 num_frames, num_classes, label_names, version, batch_size, 
                  frame_step, train_backbone, regularization, output_signature):
         self.name = "Baseline"
         self.model_id = model_id
         self.model_type = model_type
         self.checkpoint_dir = f'MoViNets/movinet_{model_id}_{model_type}'
-        self.weights_file = f'/movinet_{self.name}_{model_id}_{model_type}_weights.hdf5'
+        self.weights_file = f'/movinet_{self.name}_{model_id}_{model_type}_weights{version}.hdf5'
         self.resolution = resolution
         self.num_frames = num_frames
         self.num_classes = num_classes
         self.label_names = label_names
+        self.version = version
         self.shots = shots
         self.dropout = dropout
         self.batch_size = batch_size
@@ -90,7 +91,7 @@ class BaselineModel:
         self.history = performance_history
         
         os.makedirs('metrics', exist_ok=True)
-        with open(f'metrics/Metrics {self.name} for {self.model_id.upper()}.txt', 'w') as f:
+        with open(f'metrics/Metrics {self.name} for {self.model_id.upper()}{self.version}.txt', 'w') as f:
             json.dump(performance_history, f, indent=4)
     
     def test(self):
@@ -104,31 +105,11 @@ class BaselineModel:
         f1 = f1_score(self.actual, self.predicted, average='weighted')
         report = classification_report(self.actual, self.predicted, target_names=self.label_names, zero_division=0)
         
-        with open(f'metrics/Metrics {self.name} for {self.model_id.upper()}.txt', 'a') as f:
+        with open(f'metrics/Metrics {self.name} for {self.model_id.upper()}{self.version}.txt', 'a') as f:
             f.write(f"\nacc={acc}, balanced_acc={balanced_acc}, precision={precision}, recall={recall}, f1={f1}")
             f.write(f"\n\n{report}")
-
-        #self.test_per_class()
         
         return balanced_acc
-    
-    def test_per_class(self):
-        print(f"{'Class':<20}{'Test samples':<15}{'Accuracy':<12}{'Precision':<12}{'Recall':<12}{'F1':<12}")
-        print('-' * 83)
-
-        for idx, label in enumerate(self.label_names):
-            actual_class_indices = np.where(np.array(self.actual) == idx)
-            actual_class = np.array(self.actual)[actual_class_indices]
-            predicted_class = np.array(self.predicted)[actual_class_indices]
-            test_samples = np.sum(actual_class)
-            accuracy = accuracy_score(actual_class, predicted_class)
-            precision = precision_score(actual_class, predicted_class, labels=[idx], average=None, zero_division=0)[0]
-            recall = recall_score(actual_class, predicted_class, labels=[idx], average=None, zero_division=0)[0]
-            f1 = f1_score(actual_class, predicted_class, labels=[idx], average=None, zero_division=0)[0]
-
-            print(f"{label:<20}, tst={test_samples}, acc={accuracy}, prc={precision}, rcl={recall}, f1={f1}")
-            with open(f'metrics/Metrics {self.name} for {self.model_id.upper()}.txt', 'a') as f:
-                f.write(f"\n{label:<20}, tst={test_samples}, acc={accuracy}, prc={precision}, rcl={recall}, f1={f1}")
         
     def predict(self, ds):
         labels = self.base_model.predict(ds)
@@ -199,7 +180,7 @@ class BaselineModel:
             
     # Modified plot_train_val function
     def plot_train_val(self, savefig=True):
-        title = f'Training History {self.name} for {self.model_id.upper()}'
+        title = f'Training History {self.name} for {self.model_id.upper()}{self.version}'
         try:
             Utils.plot_metrics(self.history, 
                                ['loss', 'accuracy', 'precision', 'recall', 'f1'], 
@@ -211,9 +192,9 @@ class BaselineModel:
     def plot_confusion_matrix(self, savefig=True):
         try:
             Utils.cm_heatmap(self.actual, self.predicted, self.label_names, savefig, 
-                       (f'Confusion Matrix {self.name} for {self.model_id.upper()}'))
+                       (f'Confusion Matrix {self.name} for {self.model_id.upper()}{self.version}'))
         except Exception as e:
             print(f"We found the error: {e}\nNow doing testing again...")
             self.test()
             Utils.cm_heatmap(self.actual, self.predicted, self.label_names, savefig, 
-                       (f'Confusion Matrix {self.name} for {self.model_id.upper()}'))
+                       (f'Confusion Matrix {self.name} for {self.model_id.upper()}{self.version}'))

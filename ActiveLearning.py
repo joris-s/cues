@@ -312,6 +312,6 @@ class ActiveLearningModel(BaselineModel):
         self.history = performance_history
         
         os.makedirs('metrics', exist_ok=True)
-        with open(f'metrics/Metrics {self.name} for {self.model_id.upper()}.txt', 'w') as f:
+        with open(f'metrics/Metrics {self.name} for {self.model_id.upper()}{self.version}.txt', 'w') as f:
             json.dump(performance_history, f, indent=4)
 
