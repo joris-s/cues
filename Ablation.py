@@ -77,7 +77,8 @@ create_fig(data)
 
 """V2: Optical flow preprocessing
 """
-#os.system("python Main.py -b a2 -ep 5 -bs 4 -do 0.3 -cl 3 -sh 15 -of -av V2")
+os.system("python Main.py -b a2 -ep 5 -bs 4 -do 0.3 -cl 3 -sh 15 -of -av V2")
+os.system("python Main.py -b a2 -ep 5 -bs 4 -do 0.3 -cl 3 -sh 15 -of -nt -av V2.tsne")
 
 """V3: Leave one out traing and testing
 """

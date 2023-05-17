@@ -192,12 +192,11 @@ def frames_from_video_of(video_path, n_frames, output_size, frame_step=15):
         if ret:
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             flow = cv2.calcOpticalFlowFarneback(prev_gray, gray, None, 0.5, 3, 15, 3, 5, 1.2, 0)
-            mag, ang = cv2.cartToPolar(flow[...,0], flow[...,1])
-            hsv = np.zeros_like(frame)
-            hsv[...,1] = 255
-            hsv[...,0] = ang*180/np.pi/2
-            hsv[...,2] = cv2.normalize(mag, None, 0, 255, cv2.NORM_MINMAX)
-            optical_flow_frame = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+
+            # Using flow frames directly and appending gray frame to make it 3D
+            optical_flow_frame = np.dstack((flow[..., 0], flow[..., 1], gray))
+
+            # Format frame to required output size
             optical_flow_frame = format_frames(optical_flow_frame, output_size)
             optical_flow_frames.append(optical_flow_frame)
             prev_gray = gray
@@ -205,9 +204,10 @@ def frames_from_video_of(video_path, n_frames, output_size, frame_step=15):
             optical_flow_frames.append(np.zeros((*output_size, 3)))
             
     src.release()
-    optical_flow_frames = np.array(optical_flow_frames)[..., [2, 1, 0]]
+    optical_flow_frames = np.array(optical_flow_frames)
 
     return optical_flow_frames
+
 
 
 def filter_examples_per_class(examples_list, max_examples_per_class):
@@ -656,6 +656,7 @@ def plot_all_tsne(model):
     data = [(v, start, stop) for (v, start, stop) in combined_datasets.unbatch()]
     vids = np.array([v for v, _, _ in data])
     labels = np.array([l for _, l, _ in data])
+    path = np.array([l for _, _, p in data])
 
     # Get the penultimate layer of the model in batches
     batch_size = 16
@@ -680,7 +681,7 @@ def plot_all_tsne(model):
     print(f"Lengths - Train: {train_len}, Val: {val_len}, Test: {test_len}")
 
     # Plot t-SNE for train, val, test, and combined datasets
-    x_lim, y_lim = plot_tsne_per_video(tsne_representation, paths, np.arange(len(labels)), name=f'tsne_{model.model_id.upper()}_combined')
+    x_lim, y_lim = plot_tsne_per_video(tsne_representation, paths, np.arange(len(labels)), name=f'tsne_{model.model_id.upper()}_video_combined')
     x_lim, y_lim = plot_tsne(tsne_representation, labels, np.arange(len(labels)), name=f'tsne_{model.model_id.upper()}_combined')
     plot_tsne(tsne_representation[:train_len], labels[:train_len], np.arange(train_len), name=f'tsne_{model.model_id.upper()}_train', x_lim=x_lim, y_lim=y_lim)
     plot_tsne(tsne_representation[train_len:train_len+val_len], labels[train_len:train_len+val_len], np.arange(val_len), name=f'tsne_{model.model_id.upper()}_val', x_lim=x_lim, y_lim=y_lim)
