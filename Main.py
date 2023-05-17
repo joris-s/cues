@@ -150,3 +150,5 @@ if __name__ == '__main__':
             model.load_best_weights()
         model.test()
         model.plot_confusion_matrix()
+        
+        Utils.plot_all_tsne(model)

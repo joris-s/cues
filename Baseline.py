@@ -100,9 +100,9 @@ class BaselineModel:
         
         acc = accuracy_score(self.actual, self.predicted)
         balanced_acc = balanced_accuracy_score(self.actual, self.predicted)
-        precision = precision_score(self.actual, self.predicted, average='weighted', zero_division=0)
-        recall = recall_score(self.actual, self.predicted, average='weighted')
-        f1 = f1_score(self.actual, self.predicted, average='weighted')
+        precision = precision_score(self.actual, self.predicted, average='macro', zero_division=0)
+        recall = recall_score(self.actual, self.predicted, average='macro')
+        f1 = f1_score(self.actual, self.predicted, average='macro')
         report = classification_report(self.actual, self.predicted, target_names=self.label_names, zero_division=0)
         
         with open(f'metrics/Metrics {self.name} for {self.model_id.upper()}{self.version}.txt', 'a') as f:

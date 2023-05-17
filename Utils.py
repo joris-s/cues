@@ -164,12 +164,12 @@ def frames_from_video_file(video_path, n_frames, output_size, frame_step=15):
     return result
 
 def frames_from_video_of(video_path, n_frames, output_size, frame_step=15):
-    result = []
+    optical_flow_frames = []
     src = cv2.VideoCapture(str(video_path))
 
     if not src.isOpened():
         print(f"Error: Could not open the video file {video_path}.")
-        return result
+        return optical_flow_frames
 
     video_length = int(src.get(cv2.CAP_PROP_FRAME_COUNT))
     frame_step = int(video_length / n_frames)
@@ -190,20 +190,24 @@ def frames_from_video_of(video_path, n_frames, output_size, frame_step=15):
         for _ in range(frame_step-1):
             ret, frame = src.read()
         if ret:
-            gray = cv2.cvtColor(np.array(frame), cv2.COLOR_BGR2GRAY)
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             flow = cv2.calcOpticalFlowFarneback(prev_gray, gray, None, 0.5, 3, 15, 3, 5, 1.2, 0)
-            prev_gray =gray.copy()
-            flow[..., 0] = cv2.normalize(flow[..., 0], None, 0, 255, cv2.NORM_MINMAX)
-            flow[..., 1] = cv2.normalize(flow[..., 1], None, 0, 255, cv2.NORM_MINMAX)
-            gray = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX)
-            frame = np.stack([flow[..., 0], flow[..., 1], gray], axis=2)
-            frame = format_frames(frame, output_size)
-            result.append(frame)
+            mag, ang = cv2.cartToPolar(flow[...,0], flow[...,1])
+            hsv = np.zeros_like(frame)
+            hsv[...,1] = 255
+            hsv[...,0] = ang*180/np.pi/2
+            hsv[...,2] = cv2.normalize(mag, None, 0, 255, cv2.NORM_MINMAX)
+            optical_flow_frame = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+            optical_flow_frame = format_frames(optical_flow_frame, output_size)
+            optical_flow_frames.append(optical_flow_frame)
+            prev_gray = gray
         else:
-            result.append(np.zeros((*output_size, 3)))
+            optical_flow_frames.append(np.zeros((*output_size, 3)))
+            
     src.release()
+    optical_flow_frames = np.array(optical_flow_frames)[..., [2, 1, 0]]
 
-    return np.array(result)
+    return optical_flow_frames
 
 
 def filter_examples_per_class(examples_list, max_examples_per_class):
@@ -589,6 +593,63 @@ def plot_tsne(tsne_representation, labels, indices, savefigs=True, name='', x_li
     
     return x_lim, y_lim
 
+def get_video_codes(video_paths):
+    # Initialize a dictionary to hold the mapping
+    video_mapping = {}
+
+    # Get all the video paths in the 'data/slapi/labeled' directory
+    for root, dirs, files in os.walk(LABELED_FOLDER):
+        for file in files:
+            if file.endswith('.mp4'):
+                video = os.path.basename(root)
+                video_mapping[file] = video
+
+    # Initialize a list to hold the video codes
+    video_codes = []
+
+    # For each video path in the provided list, find the VIDEO
+    for video_path in video_paths:
+        file = os.path.basename(video_path)
+        video = video_mapping.get(file, "Not found")
+        video_codes.append(video[:2])
+
+    return video_codes
+
+
+def plot_tsne_per_video(tsne_representation, paths, indices, savefigs=True, name='', x_lim=None, y_lime=None):
+    labels = get_video_codes(paths)
+    
+    num_classes = len(np.unique(labels))
+    markers = ['o', 's', '*', 'D', 'p', 's']
+    colors = ['#377eb8', '#ff7f00', '#a65628', '#984ea3', '#4daf4a', '#f781bf']  # These colors are a set of colorblind-friendly colors
+
+    plt.figure(figsize=(12, 8))
+    unique_labels = np.unique(labels)
+    for label, color, marker in zip(unique_labels, colors, markers[:num_classes]):
+        label_indices = np.where(labels == label)
+        plot_indices = np.intersect1d(label_indices, indices)
+        plt.scatter(tsne_representation[plot_indices, 0], tsne_representation[plot_indices, 1], label=LABEL_NAMES[label], c=[color], marker=marker, alpha=0.7, s=150)
+
+    plt.gca().spines['top'].set_visible(False)
+    plt.gca().spines['right'].set_visible(False)
+    plt.xlabel("t-SNE Axis 0")
+    plt.ylabel("t-SNE Axis 1")
+    plt.legend(title="Classes", loc='center left', bbox_to_anchor=(1, 0.5))
+    if not x_lim:
+        x_lim = (min(tsne_representation[:, 0]) - 5, max(tsne_representation[:, 0]) + 5)
+        y_lim = (min(tsne_representation[:, 1]) - 5, max(tsne_representation[:, 1]) + 5)
+    plt.xlim(x_lim)
+    plt.ylim(y_lim)
+    print('saving')
+    if not os.path.exists('figs/'):
+        os.makedirs('figs/')
+
+    plt.savefig(os.path.join('figs/tsne/', f'{name}.png'), dpi=1000, bbox_inches='tight')
+    plt.close()
+    
+    return x_lim, y_lim   
+    
+
 def plot_all_tsne(model):
     combined_datasets = model.train_ds.concatenate(model.val_ds).concatenate(model.test_ds)
 
@@ -619,6 +680,7 @@ def plot_all_tsne(model):
     print(f"Lengths - Train: {train_len}, Val: {val_len}, Test: {test_len}")
 
     # Plot t-SNE for train, val, test, and combined datasets
+    x_lim, y_lim = plot_tsne_per_video(tsne_representation, paths, np.arange(len(labels)), name=f'tsne_{model.model_id.upper()}_combined')
     x_lim, y_lim = plot_tsne(tsne_representation, labels, np.arange(len(labels)), name=f'tsne_{model.model_id.upper()}_combined')
     plot_tsne(tsne_representation[:train_len], labels[:train_len], np.arange(train_len), name=f'tsne_{model.model_id.upper()}_train', x_lim=x_lim, y_lim=y_lim)
     plot_tsne(tsne_representation[train_len:train_len+val_len], labels[train_len:train_len+val_len], np.arange(val_len), name=f'tsne_{model.model_id.upper()}_val', x_lim=x_lim, y_lim=y_lim)
