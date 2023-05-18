@@ -45,6 +45,12 @@ class ActiveLearningModel(BaselineModel):
     def init_data(self, *args, **kwargs):
         super().init_data(*args, **kwargs)
         self.labeled_ds = self.train_ds
+        self.probabilities_ds = tf.data.Dataset.from_generator(Utils.FrameGenerator('data/slapi/special', self.num_frames,
+                                                                           resolution = self.resolution,
+                                                                           frame_step=self.frame_step,
+                                                                           extension='.mp4'),
+                                                             output_signature = self.output_signature)
+        self.probabilities_ds = self.probabilities_ds.batch(self.batch_size)
     
     def init_unlabeled_data(self, path, extension='.mp4'):
             unlabeled_ds = tf.data.Dataset.from_generator(Utils.ProposalGenerator(self.base_model, path,
@@ -223,7 +229,9 @@ class ActiveLearningModel(BaselineModel):
             return selected_indices
 
         selected_indices = select_weighted_top_samples(vids, Utils.LABEL_NAMES, Utils.get_class_weights(Utils.remove_paths(self.labeled_ds)))
-
+        #selected_indices = uncertainty_sampling(vids, self.num_samples)
+        input(f"You will label {len(selected_indices)}, proceed to labeling? [ENTER]: ")
+        
         processed_frames, start_indices, stop_indices = zip(*data)
         processed_frames, start_indices, stop_indices = np.array(processed_frames), np.array(start_indices), np.array(stop_indices)
     
@@ -239,6 +247,15 @@ class ActiveLearningModel(BaselineModel):
         unlabeled_ds = tf.data.Dataset.from_tensor_slices((processed_frames[remaining_indices], start_indices[remaining_indices], stop_indices[remaining_indices])).batch(self.batch_size)
     
         return labeled_ds, unlabeled_ds
+    
+    def save_probabilities(self):
+        
+        predicted = self.base_model.predict(self.probabilities_ds)
+        probabilities = np.array(tf.nn.softmax(tf.concat(predicted, axis=0)))
+        
+        with open(f'metrics/AL_probs.txt', 'a') as f:
+            f.writelines(str(probabilities)+"\n\n")
+        
     
     def train(self, learning_rate=1e-3, epochs=5):
         ph = {m.name: [] for m in Utils.METRICS}
@@ -267,6 +284,7 @@ class ActiveLearningModel(BaselineModel):
                                 class_weight=Utils.get_class_weights(train),
                                 verbose=1)
 
+            self.save_probabilities()
             for k in results.history.keys():
                 if k.startswith('val_'):
                     performance_history[k].extend(results.history[k])
@@ -301,6 +319,7 @@ class ActiveLearningModel(BaselineModel):
                             class_weight=Utils.get_class_weights(train),
                             verbose=1)
         
+        self.save_probabilities()
         for k in results.history.keys():
             if k.startswith('val_'):
                 performance_history[k].extend(results.history[k])

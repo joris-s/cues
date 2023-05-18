@@ -432,6 +432,86 @@ def create_data_splits(train_ratio=0.6, val_ratio=0.2, test_ratio=0.2, split_fil
 """*****************************************
 *             Plotting Functions           *
 *****************************************"""
+def cm_heatmap_small(actual, predicted, labels, savefigs=False, name='heatmap'):
+    plt.clf()
+    mapping = {
+        0:  2,
+        1:  2,
+        2:  0,
+        3:  0,
+        4:  1,
+        5:  1,
+        6:  1,
+        7:  1,
+        8:  0,
+        9:  2,
+        10: 2,
+        11: 0,
+        12: 0,
+        13: 0,
+        14: 2,
+        15: 0,
+        16: 0,
+        17: 0,
+        18: 2,
+        19: 2,
+        20: 1,
+        21: 0,
+        22: 2,
+        23: 2
+    }
+    
+    # First, map classes to categories
+    actual = [mapping[int(x)] for x in actual]
+    predicted = [mapping[int(x)] for x in predicted]
+
+    # Get the unique category labels
+    labels = list(set(mapping.values()))
+
+    # Compute confusion matrix
+    cm_num = confusion_matrix(actual, predicted)
+    cm = cm_num.astype('float') / cm_num.sum(axis=1)[:, np.newaxis]
+
+    # Create subplots
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
+
+    # Plot the normalized confusion matrix
+    sns.heatmap(cm, annot=True, cbar=False, cmap='BuPu', vmin=0.00, vmax=1.00, ax=ax1, square=True)
+    ax1.set_title('Normalized Confusion Matrix', fontsize=16)
+    ax1.set_xlabel('Predicted Category', fontsize=16)
+    ax1.set_ylabel('Actual Category', fontsize=16)
+    plt.setp(ax1.get_xticklabels(), rotation=90)
+    plt.setp(ax1.get_yticklabels(), rotation=0)
+    ax1.xaxis.set_ticklabels(['Hunger', 'Discomfort', 'Other'])
+    ax1.yaxis.set_ticklabels(['Hunger', 'Discomfort', 'Other']) 
+
+    # Add black borders around the diagonal
+    for i in range(len(labels)):
+        rect = patches.Rectangle((i, i), 1, 1, linewidth=2, edgecolor='black', facecolor='none')
+        ax1.add_patch(rect)
+
+    # Plot the original confusion matrix with integer values
+    sns.heatmap(cm_num, annot=True, cbar=False, cmap='BuPu', ax=ax2, square=True)
+    ax2.set_title('Confusion Matrix with Frequency Values', fontsize=16)
+    ax2.set_xlabel('Predicted Category', fontsize=16)
+    ax2.set_ylabel('Actual Category', fontsize=16)
+    plt.setp(ax2.get_xticklabels(), rotation=90)
+    plt.setp(ax2.get_yticklabels(), rotation=0)
+    ax2.xaxis.set_ticklabels(['Hunger', 'Discomfort', 'Other'])
+    ax2.yaxis.set_ticklabels(['Hunger', 'Discomfort', 'Other']) 
+
+    # Add black borders around the diagonal
+    for i in range(len(labels)):
+        rect = patches.Rectangle((i, i), 1, 1, linewidth=2, edgecolor='black', facecolor='none')
+        ax2.add_patch(rect)
+        
+    plt.tight_layout()
+    
+    if savefigs:
+        plt.savefig('figs/cm/'+name+'_small.png', bbox_inches='tight', dpi=1000)
+
+    plt.clf()
+
 def cm_heatmap(actual, predicted, labels, savefigs=False, name='heatmap'):
     plt.clf()
     cm_num = confusion_matrix(actual, predicted)
@@ -493,7 +573,8 @@ def cm_heatmap(actual, predicted, labels, savefigs=False, name='heatmap'):
         plt.savefig('figs/cm/'+name+'.png', bbox_inches='tight', dpi=1000)
     plt.close()    
     plt.clf()
-
+    
+    cm_heatmap_small(actual, predicted, ['Hunger', 'Discomfort', 'Other'], savefigs, name)
 
 # Modified plot_train_val function
 def plot_metrics(history, metrics, title, savefigs=True):
@@ -598,10 +679,10 @@ def get_video_codes(video_paths):
     video_mapping = {}
 
     # Get all the video paths in the 'data/slapi/labeled' directory
-    for root, dirs, files in os.walk(LABELED_FOLDER):
+    for root, dirs, files in os.walk('data/slapi/labeled'):
         for file in files:
             if file.endswith('.mp4'):
-                video = os.path.basename(root)
+                video = str(root).split('/')[3]
                 video_mapping[file] = video
 
     # Initialize a list to hold the video codes
@@ -609,12 +690,12 @@ def get_video_codes(video_paths):
 
     # For each video path in the provided list, find the VIDEO
     for video_path in video_paths:
-        file = os.path.basename(video_path)
+        video_path = video_path.numpy().decode('utf-8')
+        file = video_path.split('/')[-1]
         video = video_mapping.get(file, "Not found")
         video_codes.append(video[:2])
 
-    return video_codes
-
+    return np.array(video_codes)
 
 def plot_tsne_per_video(tsne_representation, paths, indices, savefigs=True, name='', x_lim=None, y_lime=None):
     labels = get_video_codes(paths)
@@ -625,16 +706,16 @@ def plot_tsne_per_video(tsne_representation, paths, indices, savefigs=True, name
 
     plt.figure(figsize=(12, 8))
     unique_labels = np.unique(labels)
+
     for label, color, marker in zip(unique_labels, colors, markers[:num_classes]):
         label_indices = np.where(labels == label)
-        plot_indices = np.intersect1d(label_indices, indices)
-        plt.scatter(tsne_representation[plot_indices, 0], tsne_representation[plot_indices, 1], label=LABEL_NAMES[label], c=[color], marker=marker, alpha=0.7, s=150)
+        plt.scatter(tsne_representation[label_indices, 0], tsne_representation[label_indices, 1], label=label, c=[color], marker=marker, alpha=0.7, s=150)
 
     plt.gca().spines['top'].set_visible(False)
     plt.gca().spines['right'].set_visible(False)
     plt.xlabel("t-SNE Axis 0")
     plt.ylabel("t-SNE Axis 1")
-    plt.legend(title="Classes", loc='center left', bbox_to_anchor=(1, 0.5))
+    plt.legend(title="Infant ID", loc='center left', bbox_to_anchor=(1, 0.5))
     if not x_lim:
         x_lim = (min(tsne_representation[:, 0]) - 5, max(tsne_representation[:, 0]) + 5)
         y_lim = (min(tsne_representation[:, 1]) - 5, max(tsne_representation[:, 1]) + 5)
@@ -648,7 +729,6 @@ def plot_tsne_per_video(tsne_representation, paths, indices, savefigs=True, name
     plt.close()
     
     return x_lim, y_lim   
-    
 
 def plot_all_tsne(model):
     combined_datasets = model.train_ds.concatenate(model.val_ds).concatenate(model.test_ds)
@@ -656,7 +736,7 @@ def plot_all_tsne(model):
     data = [(v, start, stop) for (v, start, stop) in combined_datasets.unbatch()]
     vids = np.array([v for v, _, _ in data])
     labels = np.array([l for _, l, _ in data])
-    path = np.array([l for _, _, p in data])
+    paths = np.array([l for _, _, p in data])
 
     # Get the penultimate layer of the model in batches
     batch_size = 16
