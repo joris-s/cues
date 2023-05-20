@@ -19,27 +19,29 @@ class ActiveLearningModel(BaselineModel):
     num_loops: int
     num_samples: int
     
-    def __init__(self, num_loops, data_path, num_samples, *args, **kwargs):
+    def __init__(self, num_loops, unlabeled_path, num_samples, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.name = "AL"
         self.weights_file = f'/movinet_{self.name}_{self.model_id}_{self.model_type}_weights.hdf5'
         self.num_loops = num_loops
         self.num_samples = num_samples
         self.unlabeled_paths = []
-        self.unlabeled_path = ""
+        self.unlabeled_path = unlabeled_path
         os.makedirs(Utils.AL_FOLDER, exist_ok=True)
         
-        # Read the INCLUDE file and create a set of video codes to be included
-        with open('data/slapi/INCLUDE', 'r') as f:
-            included_video_codes = set(line.strip() for line in f.readlines())
+        # # Read the INCLUDE file and create a set of video codes to be included
+        # with open('data/slapi/INCLUDE', 'r') as f:
+        #     included_video_codes = set(line.strip() for line in f.readlines())
         
-        for root, dirs, files in os.walk(data_path):
-            for file in files:
-                if file.endswith(".mp4"):
-                    self.unlabeled_paths.append(os.path.join(root, file))
+        # for root, dirs, files in os.walk(data_path):
+        #     for file in files:
+        #         if file.endswith(".mp4"):
+        #             self.unlabeled_paths.append(os.path.join(root, file))
 
-        self.unlabeled_paths = [path for path in self.unlabeled_paths if not any(video_code in path for video_code in included_video_codes)]
-        self.unlabeled_path = np.random.choice(self.unlabeled_paths)
+        # self.unlabeled_paths = [path for path in self.unlabeled_paths if not any(video_code in path for video_code in included_video_codes)]
+        # self.unlabeled_path = np.random.choice(self.unlabeled_paths)
+        
+        #self.unlabeled_indices = self.find_unlabeled_indices()
         
                 
     def init_data(self, *args, **kwargs):
@@ -52,12 +54,24 @@ class ActiveLearningModel(BaselineModel):
                                                              output_signature = self.output_signature)
         self.probabilities_ds = self.probabilities_ds.batch(self.batch_size)
     
-    def init_unlabeled_data(self, path, extension='.mp4'):
-            unlabeled_ds = tf.data.Dataset.from_generator(Utils.ProposalGenerator(self.base_model, path,
-                                   self.num_frames, Utils.MOVINET_PARAMS[self.model_id][0], 
-                                   self.frame_step), output_signature = Utils.GENERATOR_SIGNATURE)
-            self.unlabeled_ds = unlabeled_ds.batch(self.batch_size)
+    # def init_unlabeled_data(self, path, extension='.mp4'):
+    #     self.unlabeled_ds = tf.data.Dataset.from_generator(Utils.ProposalGenerator(self.base_model, path,
+    #                                self.num_frames, Utils.MOVINET_PARAMS[self.model_id][0], 
+    #                                self.frame_step), output_signature = Utils.GENERATOR_SIGNATURE).batch(self.batch_size)
 
+    def find_unlabeled_indices(self):
+        startstop_ds = tf.data.Dataset.from_generator(Utils.StartStopGenerator(self.base_model, self.unlabeled_path,
+                               self.num_frames, Utils.MOVINET_PARAMS[self.model_id][0], 
+                               self.frame_step), output_signature = Utils.STARTSTOP_SIGNATURE)
+
+        self.unlabeled_indices = [(int(start), int(stop)) for start, stop in startstop_ds]
+        
+    def init_unlabeled_data(self):
+        #path, indices, n_frames, resolution, frame_step
+        self.unlabeled_ds = tf.data.Dataset.from_generator(Utils.ProposalGenerator(self.unlabeled_path,
+                                                                                   self.unlabeled_indices,
+                                   self.num_frames, Utils.MOVINET_PARAMS[self.model_id][0], 
+                                   self.frame_step), output_signature = Utils.GENERATOR_SIGNATURE).batch(self.batch_size)
     
     def get_labels(self, path, start_indices, stop_indices, samples):
         labels, return_samples, saved_paths = [], [], []
@@ -167,12 +181,15 @@ class ActiveLearningModel(BaselineModel):
 
         data = [(v, start, stop) for (v, start, stop) in unlabeled_ds.unbatch()]
         vids = np.array([v for v, _, _ in data])
+        print(len(vids), 'got here1')
         
         # Highest entropy score across logits
         def uncertainty_sampling(vids, num_samples):
+            print('starting uncertainty')
             unlabeled_probs = tf.nn.softmax(self.base_model(vids))
             entropies = -tf.reduce_sum(unlabeled_probs * tf.math.log(unlabeled_probs), axis=-1)
             indices = tf.argsort(entropies, direction='DESCENDING')
+            print('finished uncertainty')
             return indices[:num_samples]
         
         #Most diverse in terms of feature representation
@@ -244,9 +261,11 @@ class ActiveLearningModel(BaselineModel):
         labeled_ds = labeled_ds.unbatch().concatenate(tf.data.Dataset.from_tensor_slices((selected_samples, selected_labels, selected_paths))).shuffle(buffer_size=len(vids)+len(selected_samples)).batch(self.batch_size)
     
         remaining_indices = np.delete(np.arange(len(processed_frames)), selected_indices)
-        unlabeled_ds = tf.data.Dataset.from_tensor_slices((processed_frames[remaining_indices], start_indices[remaining_indices], stop_indices[remaining_indices])).batch(self.batch_size)
+        self.unlabeled_indices = np.array(self.unlabeled_indices)[remaining_indices]
+        self.init_unlabeled_data()
+        #unlabeled_ds = tf.data.Dataset.from_tensor_slices((processed_frames[remaining_indices], start_indices[remaining_indices], stop_indices[remaining_indices])).batch(self.batch_size)
     
-        return labeled_ds, unlabeled_ds
+        return labeled_ds
     
     def save_probabilities(self):
         
@@ -256,7 +275,6 @@ class ActiveLearningModel(BaselineModel):
         with open(f'metrics/AL_probs.txt', 'a') as f:
             f.writelines(str(probabilities)+"\n\n")
         
-    
     def train(self, learning_rate=1e-3, epochs=5):
         ph = {m.name: [] for m in Utils.METRICS}
         performance_history = {'loss': [], 'val_loss': []}
@@ -283,6 +301,9 @@ class ActiveLearningModel(BaselineModel):
                                 validation_freq=1,
                                 class_weight=Utils.get_class_weights(train),
                                 verbose=1)
+            
+            if i == 0:
+                self.find_unlabeled_indices()
 
             self.save_probabilities()
             for k in results.history.keys():
@@ -300,10 +321,10 @@ class ActiveLearningModel(BaselineModel):
             
             #Maybe not do this every time, but just recompute uncertainty over self.unlabeled_ds since it is still available
             #maybe only do this as fucntion of num_loops/len(self.available paths)
-            self.unlabeled_path = np.random.choice(self.unlabeled_paths)
-            self.init_unlabeled_data(self.unlabeled_path)
+            #self.unlabeled_path = np.random.choice(self.unlabeled_paths)
+            self.init_unlabeled_data()
             
-            self.labeled_ds, self.unlabeled_ds = self.select_samples(self.labeled_ds, self.unlabeled_ds, self.num_samples)
+            self.labeled_ds = self.select_samples(self.labeled_ds, self.unlabeled_ds, self.num_samples)
             
             os.system('cls' if os.name == 'nt' else 'clear')
     
@@ -333,4 +354,3 @@ class ActiveLearningModel(BaselineModel):
         os.makedirs('metrics', exist_ok=True)
         with open(f'metrics/Metrics {self.name} for {self.model_id.upper()}{self.version}.txt', 'w') as f:
             json.dump(performance_history, f, indent=4)
-

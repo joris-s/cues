@@ -43,6 +43,12 @@ GENERATOR_SIGNATURE = (
   tf.TensorSpec(shape = (), dtype = tf.int32)
 )
 
+STARTSTOP_SIGNATURE = (
+  #tf.TensorSpec(shape = (None, None, None, 3), dtype = tf.float32), 
+  tf.TensorSpec(shape = (), dtype = tf.int32), 
+  tf.TensorSpec(shape = (), dtype = tf.int32)
+)
+
 MOVINET_PARAMS = {
   'a0': (172, 5),
   'a1': (172, 5),
@@ -208,8 +214,6 @@ def frames_from_video_of(video_path, n_frames, output_size, frame_step=15):
 
     return optical_flow_frames
 
-
-
 def filter_examples_per_class(examples_list, max_examples_per_class):
     num_examples_per_class = {}
     filtered_list = []
@@ -254,6 +258,50 @@ class FrameGenerator:
             yield video_frames, tf.cast(label, tf.int32), path.__str__()
 
 class ProposalGenerator:
+    def __init__(self, path, indices, n_frames, resolution, frame_step, extension='.mp4'):
+        self.path = path
+        self.indices = indices
+        self.n_frames = n_frames
+        self.resolution = resolution
+        self.extension = extension
+        self.frame_step = frame_step
+        
+    def generate_frames(self, src, n_frames, output_size, start, stop, frame_step=15):
+        result = []
+    
+        if not src.isOpened():
+            print(f"Error: Could not open the video file.")
+            return result
+    
+        src.set(cv2.CAP_PROP_POS_FRAMES, start)
+        ret, frame = src.read()
+        
+        video_length = stop-start
+        frame_step = int(video_length / n_frames)
+    
+        for _ in range(n_frames):
+            for _ in range(frame_step-1):
+                ret, frame = src.read()
+            if ret:
+                frame = format_frames(frame, output_size)
+                result.append(frame)
+            else:
+                result.append(np.zeros((*output_size, 3)))
+
+        result = np.array(result)[..., [2, 1, 0]]
+        
+        return result
+    
+
+    def __call__(self):
+        src = cv2.VideoCapture(str(self.path))
+        for (start_index, stop_index) in self.indices:
+            video_frames = self.generate_frames(src, self.n_frames, output_size=(self.resolution, self.resolution), 
+                                                  start=start_index, stop=stop_index, frame_step=self.frame_step)
+            yield video_frames, tf.cast(start_index, tf.int32), tf.cast(stop_index, tf.int32)
+        src.release()
+
+class StartStopGenerator:
     def __init__(self, model, path, n_frames, resolution, frame_step, extension='.mp4'):
         self.model = model
         self.path = path
@@ -311,20 +359,17 @@ class ProposalGenerator:
     def __call__(self):
         cap = cv2.VideoCapture(self.path)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        self.start = np.random.randint(0, total_frames-9000) #10 min
+        #self.start = np.random.randint(0, 1000) #10 min
         starting_frame = self.start
 
-        while starting_frame < (total_frames - self.n_frames):
-            
-            if starting_frame > (self.start+9000):
-                break
+        while starting_frame < 8000:#:(total_frames - self.n_frames*self.frame_step*2):
         
             processed_frames, start_index, stop_index = self.sliding_frames_from_video(starting_frame, cap)
             if isinstance(processed_frames, np.ndarray) == False:
                 break
             
             starting_frame = stop_index + 1
-            yield processed_frames, tf.cast(start_index, tf.int32), tf.cast(stop_index, tf.int32)
+            yield tf.cast(start_index, tf.int32), tf.cast(stop_index, tf.int32)
 
 
 """*****************************************
@@ -470,13 +515,16 @@ def cm_heatmap_small(actual, predicted, labels, savefigs=False, name='heatmap'):
 
     # Compute confusion matrix
     cm_num = confusion_matrix(actual, predicted)
-    cm = cm_num.astype('float') / cm_num.sum(axis=1)[:, np.newaxis]
+    cm = []
+    for i in range(len(cm_num)):
+        row = cm_num[i]
+        cm.append([(round(x/sum(row), 2)) for x in row])
 
     # Create subplots
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
 
     # Plot the normalized confusion matrix
-    sns.heatmap(cm, annot=True, cbar=False, cmap='BuPu', vmin=0.00, vmax=1.00, ax=ax1, square=True)
+    heatmap1 = sns.heatmap(cm, annot=True, cbar=False, cmap='BuPu', vmin=0.00, vmax=1.00, ax=ax1, square=True)
     ax1.set_title('Normalized Confusion Matrix', fontsize=16)
     ax1.set_xlabel('Predicted Category', fontsize=16)
     ax1.set_ylabel('Actual Category', fontsize=16)
@@ -491,7 +539,7 @@ def cm_heatmap_small(actual, predicted, labels, savefigs=False, name='heatmap'):
         ax1.add_patch(rect)
 
     # Plot the original confusion matrix with integer values
-    sns.heatmap(cm_num, annot=True, cbar=False, cmap='BuPu', ax=ax2, square=True)
+    heatmap2 = sns.heatmap(cm, annot=True, cbar=False, cmap='BuPu', ax=ax2, square=True)
     ax2.set_title('Confusion Matrix with Frequency Values', fontsize=16)
     ax2.set_xlabel('Predicted Category', fontsize=16)
     ax2.set_ylabel('Actual Category', fontsize=16)
@@ -500,6 +548,11 @@ def cm_heatmap_small(actual, predicted, labels, savefigs=False, name='heatmap'):
     ax2.xaxis.set_ticklabels(['Hunger', 'Discomfort', 'Other'])
     ax2.yaxis.set_ticklabels(['Hunger', 'Discomfort', 'Other']) 
 
+    counter = 0
+    for text1, text2 in zip(heatmap1.texts, heatmap2.texts):
+        text2.set_text(str(np.array(cm_num).flatten()[counter]))
+        counter+=1
+    
     # Add black borders around the diagonal
     for i in range(len(labels)):
         rect = patches.Rectangle((i, i), 1, 1, linewidth=2, edgecolor='black', facecolor='none')

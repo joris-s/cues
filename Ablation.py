@@ -30,7 +30,6 @@ AL_FOLDER = 'data/slapi/labeled/active-learning'
 #    os.system(f'python Main.py -b a2 -ep 5 -bs 4 -do 0.3 -cl 3 -sh {shots} -av V0.{shots}')
 
 data = {
-    'Validation Acc.':[.14, .27, .22, .32, .34, .35, .42],
     'Accuracy':       [.15, .23, .25, .26, .33, .32, .39],
     'Precision':      [.15, .23, .24, .26, .30, .29, .30],
     'Recall':         [.22, .24, .32, .29, .33, .31, .35],
@@ -38,8 +37,8 @@ data = {
 }
 
 def create_fig(data):
-    markers = ['o', 's', '*', 'D', 'p', 's']
-    colors = ['#377eb8', '#ff7f00', '#a65628', '#984ea3', '#4daf4a', '#f781bf']  # These colors are a set of colorblind-friendly colors
+    markers = ['o', 's', 'D', 'p', 's']
+    colors = ['#377eb8', '#ff7f00', '#984ea3', '#4daf4a', '#f781bf']  # These colors are a set of colorblind-friendly colors
 
     fig, ax = plt.subplots(figsize=(10, 5))
 
@@ -60,7 +59,7 @@ def create_fig(data):
     # Remove the upper and right boundaries
     ax.spines['right'].set_visible(False)
     ax.spines['top'].set_visible(False)
-    plt.savefig('figs/abalation_v1.png', bbox_inches="tight", dpi=1000)
+    plt.savefig('figs/abalation_v0.png', bbox_inches="tight", dpi=1000)
     #plt.show()
 
 create_fig(data)
@@ -77,8 +76,8 @@ create_fig(data)
 
 """V2: Optical flow preprocessing
 """
-os.system("python Main.py -b a2 -ep 5 -bs 4 -do 0.3 -cl 3 -sh 15 -of -av V2")
-os.system("python Main.py -b a2 -ep 5 -bs 4 -do 0.3 -cl 3 -sh 15 -of -nt -av V2.tsne")
+#os.system("python Main.py -b a2 -ep 5 -bs 4 -do 0.3 -cl 3 -sh 15 -of -av V2")
+#os.system("python Main.py -b a2 -ep 5 -bs 4 -do 0.3 -cl 3 -sh 15 -of -nt -av V2.tsne")
 
 """V3: Leave one out traing and testing
 """
