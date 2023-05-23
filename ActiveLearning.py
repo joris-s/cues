@@ -59,10 +59,10 @@ class ActiveLearningModel(BaselineModel):
     #                                self.num_frames, Utils.MOVINET_PARAMS[self.model_id][0], 
     #                                self.frame_step), output_signature = Utils.GENERATOR_SIGNATURE).batch(self.batch_size)
 
-    def find_unlabeled_indices(self):
+    def find_unlabeled_indices(self, i):
         startstop_ds = tf.data.Dataset.from_generator(Utils.StartStopGenerator(self.base_model, self.unlabeled_path,
                                self.num_frames, Utils.MOVINET_PARAMS[self.model_id][0], 
-                               self.frame_step), output_signature = Utils.STARTSTOP_SIGNATURE)
+                               self.frame_step, start = i*36000+1), output_signature = Utils.STARTSTOP_SIGNATURE)
 
         self.unlabeled_indices = [(int(start), int(stop)) for start, stop in startstop_ds]
         
@@ -302,8 +302,7 @@ class ActiveLearningModel(BaselineModel):
                                 class_weight=Utils.get_class_weights(train),
                                 verbose=1)
             
-            if i == 0:
-                self.find_unlabeled_indices()
+            self.find_unlabeled_indices(i)
 
             self.save_probabilities()
             for k in results.history.keys():

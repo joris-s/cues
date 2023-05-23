@@ -113,7 +113,7 @@ if __name__ == '__main__':
     if args.active_learning:
         a_models = [ActiveLearningModel(
                     num_loops=args.loops, num_samples=args.num_samples,
-                    unlabeled_path='data/self/long.mp4',
+                    unlabeled_path='data/slapi/unlabeled/cropped_top_657_20230321.mp4',
                     model_id=a_id, model_type="base", shots=args.shots, 
                     dropout=args.drop_out, 
                     resolution=Utils.MOVINET_PARAMS[a_id][0], 

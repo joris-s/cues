@@ -302,10 +302,10 @@ class ProposalGenerator:
         src.release()
 
 class StartStopGenerator:
-    def __init__(self, model, path, n_frames, resolution, frame_step, extension='.mp4'):
+    def __init__(self, model, path, n_frames, resolution, frame_step, extension='.mp4', start=0):
         self.model = model
         self.path = path
-        self.start = 0
+        self.start = start
         self.n_frames = n_frames
         self.output_size = (resolution, resolution)
         self.extension = extension
@@ -362,7 +362,7 @@ class StartStopGenerator:
         #self.start = np.random.randint(0, 1000) #10 min
         starting_frame = self.start
 
-        while starting_frame < 8000:#:(total_frames - self.n_frames*self.frame_step*2):
+        while starting_frame < starting_frame+36000:#:(total_frames - self.n_frames*self.frame_step*2):
         
             processed_frames, start_index, stop_index = self.sliding_frames_from_video(starting_frame, cap)
             if isinstance(processed_frames, np.ndarray) == False:
