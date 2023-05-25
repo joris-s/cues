@@ -4,6 +4,7 @@ import datetime
 import numpy as np
 import cv2
 import tensorflow as tf
+import math
 from sklearn.metrics import pairwise_distances
 from typing import List, Tuple, Union
 
@@ -28,21 +29,7 @@ class ActiveLearningModel(BaselineModel):
         self.unlabeled_paths = []
         self.unlabeled_path = unlabeled_path
         os.makedirs(Utils.AL_FOLDER, exist_ok=True)
-        
-        # # Read the INCLUDE file and create a set of video codes to be included
-        # with open('data/slapi/INCLUDE', 'r') as f:
-        #     included_video_codes = set(line.strip() for line in f.readlines())
-        
-        # for root, dirs, files in os.walk(data_path):
-        #     for file in files:
-        #         if file.endswith(".mp4"):
-        #             self.unlabeled_paths.append(os.path.join(root, file))
 
-        # self.unlabeled_paths = [path for path in self.unlabeled_paths if not any(video_code in path for video_code in included_video_codes)]
-        # self.unlabeled_path = np.random.choice(self.unlabeled_paths)
-        
-        #self.unlabeled_indices = self.find_unlabeled_indices()
-        
                 
     def init_data(self, *args, **kwargs):
         super().init_data(*args, **kwargs)
@@ -54,11 +41,6 @@ class ActiveLearningModel(BaselineModel):
                                                              output_signature = self.output_signature)
         self.probabilities_ds = self.probabilities_ds.batch(self.batch_size)
     
-    # def init_unlabeled_data(self, path, extension='.mp4'):
-    #     self.unlabeled_ds = tf.data.Dataset.from_generator(Utils.ProposalGenerator(self.base_model, path,
-    #                                self.num_frames, Utils.MOVINET_PARAMS[self.model_id][0], 
-    #                                self.frame_step), output_signature = Utils.GENERATOR_SIGNATURE).batch(self.batch_size)
-
     def find_unlabeled_indices(self, i):
         startstop_ds = tf.data.Dataset.from_generator(Utils.StartStopGenerator(self.base_model, self.unlabeled_path,
                                self.num_frames, Utils.MOVINET_PARAMS[self.model_id][0], 
@@ -177,81 +159,47 @@ class ActiveLearningModel(BaselineModel):
         
         return np.array(labels), np.array(return_samples), np.array(saved_paths)
 
-    def select_samples(self, labeled_ds, unlabeled_ds, num_samples):
+    def uncertainty_sampling(self, vids, num_samples):
+        unlabeled_probs = tf.nn.softmax(self.base_model(vids))
+        entropies = -tf.reduce_sum(unlabeled_probs * tf.math.log(unlabeled_probs), axis=-1)
+        indices = tf.argsort(entropies, direction='DESCENDING')
+        return indices[:num_samples]
 
-        data = [(v, start, stop) for (v, start, stop) in unlabeled_ds.unbatch()]
-        vids = np.array([v for v, _, _ in data])
-        print(len(vids), 'got here1')
-        
-        # Highest entropy score across logits
-        def uncertainty_sampling(vids, num_samples):
-            print('starting uncertainty')
-            unlabeled_probs = tf.nn.softmax(self.base_model(vids))
-            entropies = -tf.reduce_sum(unlabeled_probs * tf.math.log(unlabeled_probs), axis=-1)
-            indices = tf.argsort(entropies, direction='DESCENDING')
-            print('finished uncertainty')
-            return indices[:num_samples]
-        
-        #Most diverse in terms of feature representation
-        def diversity_sampling(vids, num_samples, k=5):
-            features = self.base_model.backbone(vids)
-            features = np.array([f.numpy().flatten() for f in features[0]['head']])
-            distance_matrix = pairwise_distances(features)
-            diversity_scores = np.mean(np.sort(distance_matrix)[:, 1:k+1], axis=1)
-            return np.argsort(diversity_scores)[-num_samples:]
-        
-        # Minimum predicted probability for predicted class
-        def least_confident_sampling(vids, num_samples):
-            unlabeled_probs = tf.nn.softmax(self.base_model(vids))
-            min_probs = tf.reduce_min(unlabeled_probs, axis=-1)
-            indices = tf.argsort(min_probs, direction='DESCENDING')
-            return indices[:num_samples]
+    def select_weighted_top_samples(self, vids, classes, class_weights, num_samples):
+        unlabeled_probs = [tf.nn.softmax(self.base_model(vids[i:i+self.batch_size])) for i in range(0, len(vids), self.batch_size)]
+        unlabeled_probs = np.array(tf.concat(unlabeled_probs, axis=0))
 
-        # BvSB
-        def margin_sampling(vids, num_samples):
-            unlabeled_probs = tf.nn.softmax(self.base_model(vids))
-            sorted_probs = tf.sort(unlabeled_probs, axis=-1, direction='DESCENDING')
-            margin = sorted_probs[:, 0] - sorted_probs[:, 1]
-            indices = tf.argsort(margin, direction='ASCENDING')
-            return indices[:num_samples]
+        normalized_weights = np.array(list(class_weights.values())) / sum(class_weights.values())
+        available_indices = np.arange(len(unlabeled_probs))
         
-        # More certain samples over time
-        def dynamic_sampling(vids, num_samples, iteration, max_iterations):
-            unlabeled_probs = tf.nn.softmax(self.base_model(vids))
-            entropies = -tf.reduce_sum(unlabeled_probs * tf.math.log(unlabeled_probs), axis=-1)
-            threshold = 1 - (iteration / max_iterations)
-            selected_indices = tf.where(entropies < threshold)
-            return tf.squeeze(selected_indices)[:num_samples]
-        
-        def select_weighted_top_samples(vids, classes, class_weights):
-            unlabeled_probs = tf.nn.softmax(self.base_model(vids))
-
-            # Normalize the class weights so they sum up to 1
-            normalized_weights = [w/np.sum(list(class_weights.values())) for w in list(class_weights.values())]
-
+        selected_indices = [[]]
+        while len(np.concatenate(selected_indices)) < num_samples:
             top_indices = {}
             for class_idx in range(len(classes)):
-                class_probs = unlabeled_probs[:, class_idx]
+                class_probs = unlabeled_probs[:, class_idx][available_indices]
+                num_samples_per_class = max(1, int(normalized_weights[class_idx] * num_samples))
 
-                # Calculate number of samples for the class based on its weight
-                num_samples = int(normalized_weights[class_idx] * self.num_samples) # total_samples is the total number of samples you want to select
+                if len(class_probs) < num_samples_per_class:
+                    break
 
-                # Edge case: when num_samples turns out to be zero
-                num_samples = max(1, num_samples) # ensure at least one sample is selected
+                topk_indices = tf.math.top_k(class_probs, k=num_samples_per_class).indices.numpy()
+                top_indices[class_idx] = available_indices[topk_indices]
 
-                topk_indices = tf.math.top_k(class_probs, k=num_samples).indices
-                top_indices[class_idx] = topk_indices.numpy()
+            selected_indices.append(np.unique(np.concatenate(list(top_indices.values()))))
+            available_indices = np.setdiff1d(available_indices, selected_indices[-1])
 
-            selected_indices = np.unique(np.concatenate(list(top_indices.values())))
-            return selected_indices
+        return np.concatenate([np.array(arr, dtype=int) for arr in selected_indices])[:num_samples]
 
-        selected_indices = select_weighted_top_samples(vids, Utils.LABEL_NAMES, Utils.get_class_weights(Utils.remove_paths(self.labeled_ds)))
-        #selected_indices = uncertainty_sampling(vids, self.num_samples)
+    def select_samples(self, labeled_ds, unlabeled_ds, num_samples):
+        data = [(v, start, stop) for (v, start, stop) in unlabeled_ds.unbatch()]
+        vids = np.array([v for v, _, _ in data])
+        print(f'There are {len(vids)} samples to choose from')
+
+        selected_indices = self.select_weighted_top_samples(vids, Utils.LABEL_NAMES, Utils.get_class_weights(Utils.remove_paths(self.labeled_ds)), self.num_samples)
         input(f"You will label {len(selected_indices)}, proceed to labeling? [ENTER]: ")
         
         processed_frames, start_indices, stop_indices = zip(*data)
         processed_frames, start_indices, stop_indices = np.array(processed_frames), np.array(start_indices), np.array(stop_indices)
-    
         selected_samples = [processed_frames[i] for i in selected_indices]
         selected_start = [start_indices[i] for i in selected_indices]
         selected_stop = [stop_indices[i] for i in selected_indices]
@@ -263,7 +211,6 @@ class ActiveLearningModel(BaselineModel):
         remaining_indices = np.delete(np.arange(len(processed_frames)), selected_indices)
         self.unlabeled_indices = np.array(self.unlabeled_indices)[remaining_indices]
         self.init_unlabeled_data()
-        #unlabeled_ds = tf.data.Dataset.from_tensor_slices((processed_frames[remaining_indices], start_indices[remaining_indices], stop_indices[remaining_indices])).batch(self.batch_size)
     
         return labeled_ds
     
@@ -318,11 +265,7 @@ class ActiveLearningModel(BaselineModel):
             print(f'Starting Active Learning loop {i+1}/{self.num_loops}')
             tf.keras.backend.clear_session()
             
-            #Maybe not do this every time, but just recompute uncertainty over self.unlabeled_ds since it is still available
-            #maybe only do this as fucntion of num_loops/len(self.available paths)
-            #self.unlabeled_path = np.random.choice(self.unlabeled_paths)
             self.init_unlabeled_data()
-            
             self.labeled_ds = self.select_samples(self.labeled_ds, self.unlabeled_ds, self.num_samples)
             
             os.system('cls' if os.name == 'nt' else 'clear')
