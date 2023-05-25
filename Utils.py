@@ -364,7 +364,7 @@ class StartStopGenerator:
         #self.start = np.random.randint(0, 1000) #10 min
         starting_frame = self.start
 
-        while starting_frame < (self.start+18000):#:(total_frames - self.n_frames*self.frame_step*2):
+        while starting_frame < (self.start+36000):
             print(starting_frame)
 
             processed_frames, start_index, stop_index = self.sliding_frames_from_video(starting_frame, cap)

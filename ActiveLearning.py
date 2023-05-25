@@ -4,7 +4,7 @@ import datetime
 import numpy as np
 import cv2
 import tensorflow as tf
-import math
+import random
 from sklearn.metrics import pairwise_distances
 from typing import List, Tuple, Union
 
@@ -188,7 +188,8 @@ class ActiveLearningModel(BaselineModel):
             selected_indices.append(np.unique(np.concatenate(list(top_indices.values()))))
             available_indices = np.setdiff1d(available_indices, selected_indices[-1])
 
-        return np.concatenate([np.array(arr, dtype=int) for arr in selected_indices])[:num_samples]
+        selected_indices = np.concatenate([np.array(arr, dtype=int) for arr in selected_indices])
+        return random.choices(selected_indices, k=num_samples)
 
     def select_samples(self, labeled_ds, unlabeled_ds, num_samples):
         data = [(v, start, stop) for (v, start, stop) in unlabeled_ds.unbatch()]
