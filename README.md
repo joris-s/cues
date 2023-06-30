@@ -45,7 +45,7 @@ You can run the script using Dummy mode, and Expert mode. In Dummy mode, you can
 - The folder _./data/full-video/_ should consist of _only_ the video you want to use. Nothing else. 
 - You can preprocess the video in _./data/full-video/_ during the process.
 
-In ```Utils.py``` and ```Preprocessing``` you may find a wide range of functions which could enhance your experience. Do not be afraid to call them directly. They are not included in this walkthrough.   
+In ```Utils.py``` and ```Preprocessing.py``` you may find a wide range of functions which could enhance your experience. Do not be afraid to call them directly. They are not included in this walkthrough.   
 
 ### Dummy mode
 
