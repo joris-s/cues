@@ -24,9 +24,7 @@ plt.rcParams.update({'font.size': 14})
 from official.projects.movinet.modeling import movinet
 from official.projects.movinet.modeling import movinet_model
 
-if os.name != 'nt':
-    matplotlib.use('tkagg')
-
+matplotlib.use('tkagg')
 
 """*****************************************
 *            Define Constants              *
@@ -59,24 +57,13 @@ MOVINET_PARAMS = {
 }
 
 FPS = 30
-META_CLASSES = 101
-
-LABELED_FOLDER = 'data/slapi/labeled'
-UNLABELED_FOLDER = 'data/self/long_med'
-UNLABELED_PATH = 'data/self/long.mp4'
-TRAIN_FOLDER = 'data/self/joris'
-VAL_FOLDER = 'data/self/ercan'
-TEST_FOLDER = 'data/self/roos'
-AL_FOLDER = 'data/slapi/active-learning'
-if (os.name == 'nt') == False:
-    LABELED_FOLDER = 'data/labeled'
-    UNLABELED_FOLDER = 'data/unlabeled'
-    UNLABELED_PATH = 'data/unlabeled/cropped_top_657_20230321.mp4'
-    TRAIN_FOLDER = 'data/train'
-    VAL_FOLDER = 'data/val'
-    TEST_FOLDER = 'data/test'
-    AL_FOLDER = 'data/labeled/active-learning'
-
+LABELED_FOLDER = 'data/labeled'
+UNLABELED_FOLDER = 'data/unlabeled'
+UNLABELED_PATH = 'data/unlabeled/cropped_top_657_20230321.mp4'
+TRAIN_FOLDER = 'data/train'
+VAL_FOLDER = 'data/val'
+TEST_FOLDER = 'data/test'
+AL_FOLDER = 'data/labeled/active-learning'
 LABEL_NAMES = sorted(os.listdir(TRAIN_FOLDER))
 
 """*****************************************
@@ -405,7 +392,7 @@ def get_class_weights(ds):
     class_weights = {k: v/class_weight_sum for k, v in class_weights.items()}
     return class_weights
 
-def create_data_splits(train_ratio=0.6, val_ratio=0.2, test_ratio=0.2, split_file='data/slapi/SPLIT', include_file='data/slapi/INCLUDE'):
+def create_data_splits(train_ratio=0.6, val_ratio=0.2, test_ratio=0.2, split_file='data/SPLIT', include_file='data/INCLUDE'):
     # Read the INCLUDE file and create a set of video codes to be included
     with open(include_file, 'r') as f:
         included_video_codes = set(line.strip() for line in f.readlines())
