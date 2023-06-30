@@ -6,9 +6,26 @@ import pandas as pd
 import datetime
 from moviepy.editor import VideoFileClip
 import Utils
+from pathlib import Path
+import shutil
 
+# Define the starting position for the first line of text
+position = (50, 50)  # (x, y) coordinates of the top-left corner of the first line
+line_spacing = 30  # Space between each line of text
+font = cv2.FONT_HERSHEY_SIMPLEX
+font_scale = 0.5
+color = (0, 255, 0)  # BGR color tuple (green in this case)
+thickness = 1
 
 def draw_bounding_box(path):
+
+    instructions = [
+    'click-and-drag bounding box',
+    'q - (uit)',
+    's - (ave)',
+    'n - (ew frame)',
+    'c - (lear box)'
+    ]
     # Initialize the video capture object
     cap = cv2.VideoCapture(path)
     
@@ -55,6 +72,12 @@ def draw_bounding_box(path):
         # Display the current frame in the window
         display_frame = frame.copy()
         
+        # Overlay the instructions on the frame
+        for i, instruction in enumerate(instructions):
+            # Calculate the position of each line of text based on the line index
+            text_position = (position[0], position[1] + i * line_spacing)
+            cv2.putText(display_frame, instruction, text_position, font, font_scale, color, thickness)
+
         # If the user has drawn a bounding box, display it on the frame
         if bbox is not None:
             x, y, w, h = bbox
@@ -71,12 +94,12 @@ def draw_bounding_box(path):
     
         # If the user pressed 'n', set the video capture object to a new random frame
         elif key == ord('n'):
-            cap.set(cv2.CAP_PROP_POS_FRAMES, random.randint(0, frame_count - 1))
+            cap.set(cv2.CAP_PROP_POS_FRAMES, random.randint(0, frame_count - int(frame_count/10)))
             ret, frame = cap.read()
-            bbox = None
+            #bbox = None
     
-        # If the user has pressed 'r', clear the bounding box
-        if key == ord('r'):
+        # If the user has pressed 'c', clear the bounding box
+        if key == ord('c'):
             bbox = None
     
         # If the user has pressed 's', save the coordinates of the bounding box
@@ -119,10 +142,18 @@ def crop_rotate_video(input_path, output_path):
     # Open the input video file and get some properties
     cap = cv2.VideoCapture(input_path)
     fps = cap.get(cv2.CAP_PROP_FPS)
-    
+    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
     coordinates = draw_bounding_box(input_path)
 
-
+    instructions = [
+    'r - (otate infant up)',
+    'q - (uit)',
+    's - (ave)',
+    'n - (ew frame)',
+    'c - (lear box)'
+    ]
+    
     # Find the number of times to rotate the video by 90 degrees
     rotation_count = 0
     while True:
@@ -132,7 +163,13 @@ def crop_rotate_video(input_path, output_path):
             break
 
         # Rotate the frame by the current number of rotations
-        rotated_frame = rotate_frame(frame, rotation_count)
+        rotated_frame = rotate_frame(frame, rotation_count).copy()
+
+        # Overlay the instructions on the frame
+        for i, instruction in enumerate(instructions):
+            # Calculate the position of each line of text based on the line index
+            text_position = (position[0], position[1] + i * line_spacing)
+            cv2.putText(rotated_frame, instruction, text_position, font, font_scale, color, thickness)
 
         # Display the rotated frame and wait for user input
         cv2.namedWindow("Rotate", cv2.WND_PROP_FULLSCREEN)
@@ -144,11 +181,18 @@ def crop_rotate_video(input_path, output_path):
         if key == ord('r'):
             rotation_count = (rotation_count + 1) % 4
 
+        elif key == ord('q'):
+            break
+
+        elif key == ord('n'):
+            cap.set(cv2.CAP_PROP_POS_FRAMES, random.randint(0, frame_count - int(frame_count/10)))
+
         # If the user pressed 's', break out of the loop
         elif key == ord('s'):
             # Close any open windows
             cv2.destroyAllWindows()
             break
+
     print(coordinates)
     coordinates = rotate_coordinates(coordinates, rotation_count, rotated_frame)
     print(coordinates)
@@ -161,8 +205,6 @@ def crop_rotate_video(input_path, output_path):
         ret, frame = cap.read()
         if not ret:
             break
-        # if cap.get(cv2.CAP_PROP_POS_FRAMES) == 300:
-        #     break
 
         # Rotate the frame by the final number of rotations
         rotated_frame = rotate_frame(frame, rotation_count)
@@ -177,8 +219,6 @@ def crop_rotate_video(input_path, output_path):
     # Release the input and output video objects
     cap.release()
     out.release()
-from pathlib import Path
-import shutil
 
 def aggregate_videos_by_class():
     video_codes = os.listdir(Utils.LABELED_FOLDER)
@@ -278,5 +318,6 @@ def move_snippets_by_split():
         print("SPLIT file does not exist or is empty.")
 
 if __name__ == '__main__':  
-    crop_rotate_video("data/self/long.mp4", "out_path.mp4")
-    create_snippets('annotation_cues_jstab.xlsx', Utils.UNLABELED_FOLDER, Utils.LABELED_FOLDER)
+    crop_rotate_video("C:\\Users\\joris\\OneDrive - Universiteit Utrecht\\ai\\thesis\\code\\data\\full-video\\long.mp4", 
+                      "C:\\Users\\joris\\OneDrive - Universiteit Utrecht\\ai\\thesis\\code\\data\\full-video\\long_processed.mp4")
+    #create_snippets('annotation_cues_jstab.xlsx', Utils.UNLABELED_FOLDER, Utils.LABELED_FOLDER)

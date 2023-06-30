@@ -26,7 +26,6 @@ class ActiveLearningModel(BaselineModel):
         self.weights_file = f'/movinet_{self.name}_{self.model_id}_{self.model_type}_weights.hdf5'
         self.num_loops = num_loops
         self.num_samples = num_samples
-        self.unlabeled_paths = []
         self.unlabeled_path = unlabeled_path
         os.makedirs(Utils.AL_FOLDER, exist_ok=True)
 
@@ -295,5 +294,5 @@ class ActiveLearningModel(BaselineModel):
         self.history = performance_history
         
         os.makedirs('metrics', exist_ok=True)
-        with open(f'metrics/Metrics {self.name} for {self.model_id.upper()}{self.version}.txt', 'w') as f:
+        with open(f'metrics/Metrics {self.name} for {self.model_id.upper()}.txt', 'w') as f:
             json.dump(performance_history, f, indent=4)
