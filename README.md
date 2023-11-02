@@ -12,26 +12,91 @@ This project provides a script for running machine learning models with differen
 
 ## Setup
 
-1. Clone the repository:
+## Clone the repository:
 
     ```bash
     git clone https://github.com/joris-s/cues
     ```
-2. Install anaconda navigator on your HPC environment
+### 1. Install Anaconda3 and Python
 
-    You can find help here: <https://docs.anaconda.com/free/anaconda/install/linux/>
+wget https://repo.anaconda.com/archive/Anaconda3-2023.03-0-Linux-x86_64.sh
+bash Anaconda3-2023.03-0-Linux-x86_64.sh
 
-3. Install CuDNN
+### During installation:
 
-    You can find help here: <https://docs.nvidia.com/deeplearning/cudnn/install-guide/index.html>
+- Change the installation location to the `slapi` folder, preferably in a subfolder you created there. Not your own working directory, for example: `[PATH_TO_YOUR_FOLDER]/anaconda3`
 
-4. Install the required dependencies
+- When asked, "Do you wish the installer to initialize Anaconda 3 by running conda init?", answer `yes`. This will add `conda` to bash and start up `conda` upon startup of the terminal.
 
-    ```bash
-    pip install -r requirements.txt
-    ```
+### 2. Create your own tmp directory due to file size
 
-5. Do a test run: 
+```bash
+export TMPDIR=[PATH_TO_YOUR_FOLDER]/tmp
+```
+
+Make sure you create the `tmp` directory beforehand.
+
+### 3. Installing CuDNN
+
+```bash
+conda install -c anaconda cudatoolkit
+conda install -c anaconda cudnn
+python -m pip install tensorflow[and-cuda]
+```
+
+### 4. Add to ~/.bashrc
+
+```bash
+vim ~/.bashrc
+```
+
+Add the following lines:
+
+```bash
+export TMPDIR=/hpc/umc_neonatology/slapi/[YOUR_FOLDER]/tmp
+conda activate base
+cd [PATH_TO_YOUR_FOLDER]
+CUDNN_PATH=$(dirname $(python -c "import nvidia.cudnn;print(nvidia.cudnn.__file__)"))
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CONDA_PREFIX/lib/:$CUDNN_PATH/lib
+```
+
+Save and exit `vim` (press `Esc`, then type `:wq` and press `Enter`).
+
+As final step, make sure the gcc and g++ version are the same by running:
+
+```bash
+conda install -c conda-forge gcc
+conda install -c conda-forge gxx
+```
+
+### 5. Restart the Bash Terminal
+
+Close and reopen your terminal for the changes to take effect.
+
+### 6. Install Required Packages
+
+After restarting the terminal, install any additional packages or dependencies required for your project.
+
+For TensorFlow, install it using:
+
+```bash
+python -m pip install tensorflow[and-cuda]
+```
+
+The following should cover all remaining packages. 
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+If you get any `ModuleNotFound: No module name [MODULE] errors`, try:
+
+```bash
+python -m pip install [MODULE] # or
+conda install [MODULE]
+```
+
+## Do a test run: 
     
     ```bash
     python Main.py --help
