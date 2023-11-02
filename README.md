@@ -14,9 +14,9 @@ This project provides a script for running machine learning models with differen
 
 Clone the repository:
 
-    ```bash
-    git clone https://github.com/joris-s/cues
-    ```
+```bash
+git clone https://github.com/joris-s/cues
+```
 ### 1. Install Anaconda3 and Python
 
 ```bash
@@ -99,9 +99,9 @@ conda install [MODULE]
 
 ## Do a test run: 
     
-    ```bash
-    python Main.py --help
-    ```
+```bash
+python Main.py --help
+```
 
 ## Usage
 
