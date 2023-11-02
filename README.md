@@ -12,16 +12,17 @@ This project provides a script for running machine learning models with differen
 
 ## Setup
 
-## Clone the repository:
+Clone the repository:
 
     ```bash
     git clone https://github.com/joris-s/cues
     ```
 ### 1. Install Anaconda3 and Python
 
+```bash
 wget https://repo.anaconda.com/archive/Anaconda3-2023.03-0-Linux-x86_64.sh
 bash Anaconda3-2023.03-0-Linux-x86_64.sh
-
+```
 ### During installation:
 
 - Change the installation location to the `slapi` folder, preferably in a subfolder you created there. Not your own working directory, for example: `[PATH_TO_YOUR_FOLDER]/anaconda3`
