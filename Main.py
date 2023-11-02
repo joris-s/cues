@@ -158,6 +158,12 @@ if __name__ == '__main__':
     else:
         print("Skipping video preprocessing")
 
+    if get_user_input("Do you want to create snippets from your preprocessed videos? [Y/N]: ") == 'y':
+        filename = get_user_input("What is your excel annotation file name (include .xlsx in name): ")
+        create_snippets(filename, Utils.UNLABELED_FOLDER, Utils.LABELED_FOLDER)
+    else:
+        print("Skipping creating snippets")
+
     if len(sys.argv) == 1:
         # Question 2: Do you want to use the standard baseline settings?
         if get_user_input("Do you want to use the standard baseline settings? [Y/N]: ") == 'y':
