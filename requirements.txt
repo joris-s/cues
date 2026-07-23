@@ -60,7 +60,6 @@ opencv-python-headless==4.7.0.72
 openpyxl==3.1.2
 opt-einsum==3.3.0
 pandas==2.0.1
-Pillow==9.4.0
 ply==3.11
 portalocker==2.7.0
 proglog==0.1.10
