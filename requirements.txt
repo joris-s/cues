@@ -66,8 +66,6 @@ proglog==0.1.10
 promise==2.3
 protobuf==3.19.6
 py-cpuinfo==9.0.0
-pyasn1==0.5.0
-pyasn1-modules==0.3.0
 pycocotools==2.0.6
 pyparsing==3.0.9
 PyQt5-sip==12.11.0
